@@ -26,10 +26,9 @@ def _usar(k, r):
 def selector_ticker(k):
     """Buscador por nombre (filtrado por bolsa) + campos de ticker y bolsa. Devuelve (ticker, bolsa)."""
     with st.expander("🔎 No sé el ticker: buscar por nombre de empresa"):
-        c1, c2 = st.columns([1, 2])
-        filtro = c1.selectbox("Bolsa", FILTROS_BUSQUEDA, key=f"{k}_filtro",
-                              format_func=lambda x: ETIQUETAS_FILTRO.get(x, x))
-        texto = c2.text_input("Nombre de la empresa", key=f"{k}_texto", placeholder="Iberdrola, Nvidia, LVMH…")
+        filtro = st.segmented_control("Bolsa", FILTROS_BUSQUEDA, key=f"{k}_filtro", default="Todas las bolsas",
+                                      format_func=lambda x: ETIQUETAS_FILTRO.get(x, x)) or "Todas las bolsas"
+        texto = st.text_input("Nombre de la empresa", key=f"{k}_texto", placeholder="Iberdrola, Nvidia, LVMH…")
         if texto.strip():
             try:
                 res = buscar_cacheado(texto.strip(), filtro)

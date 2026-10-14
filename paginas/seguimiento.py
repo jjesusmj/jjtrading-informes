@@ -110,11 +110,10 @@ if seg.empty:
     st.info("Todavía no hay acciones en seguimiento. Añade la primera arriba.")
     st.stop()
 
-f1, f2 = st.columns([1, 2])
+f1, f2 = st.columns([4, 1], vertical_alignment="bottom")
 bolsas_lista = [b for b in BOLSAS if b in set(seg["Bolsa"])]
-filtro_bolsa = f1.selectbox("Bolsa", ["Todas"] + bolsas_lista, key="filtro_bolsa",
-                            format_func=lambda x: ETIQUETA_BOLSA.get(x, x))
-f2.write(""); f2.write("")
+filtro_bolsa = f1.segmented_control("Bolsa", ["Todas"] + bolsas_lista, key="filtro_bolsa", default="Todas",
+                                    format_func=lambda x: ETIQUETA_BOLSA.get(x, x)) or "Todas"
 solo_fav = f2.toggle("Solo favoritas", key="solo_fav")
 base = seg
 if filtro_bolsa != "Todas":
