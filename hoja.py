@@ -56,7 +56,9 @@ def leer_seguimiento():
 @st.cache_data(ttl=60, show_spinner=False)
 def leer_datos():
     ws = _pestaña(DATOS)
-    filas = ws.get_all_records()
+    # Valores sin formato: la hoja está en formato español (coma decimal) y leer el texto
+    # convertiría "133,135" en 133135. Así llegan los números tal cual se guardaron.
+    filas = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
     return pd.DataFrame(filas) if filas else pd.DataFrame(columns=_cabecera(ws))
 
 
