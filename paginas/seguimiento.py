@@ -35,11 +35,55 @@ def actualizar(pares):
     return len(filas)
 
 
-# ---------------- Añadir acción ----------------
+ETIQUETA_BOLSA = {"EEUU": "EEUU", "MADRID": "Madrid", "PARIS": "París", "MILAN": "Milán", "FRANCFORT": "Fráncfort",
+                  "AMSTERDAM": "Ámsterdam", "LONDRES": "Londres", "LISBOA": "Lisboa", "SUIZA": "Suiza",
+                  "BRUSELAS": "Bruselas", "TORONTO": "Toronto"}
+
+
+def añadir_lote(tickers, bolsa):
+    """Calcula y añade varias acciones de una misma bolsa. Guarda todo en la hoja de una vez."""
+    seg_filas, fotos, errores = [], [], []
+    barra = st.progress(0.0, text="Añadiendo…")
+    for n, t in enumerate(tickers, start=1):
+        barra.progress(n / len(tickers), text=f"Calculando {t} ({n}/{len(tickers)})…")
+        try:
+            r = informe_cacheado(t, bolsa)
+            seg_filas.append((r["ticker"], r["nombre"], bolsa, r["moneda"]))
+            fotos.append(r["fila"])
+        except Exception as e:
+            errores.append(f"{t}: {e}")
+    barra.empty()
+    añadidos = hoja.añadir_varias(seg_filas) if seg_filas else []
+    if fotos:
+        hoja.guardar_fotos(fotos)
+    hoja.limpiar_cache()
+    return añadidos, len(seg_filas) - len(añadidos), errores
+
+
+# ---------------- Añadir acciones ----------------
 with st.container(border=True):
-    st.markdown("**Añadir acción**")
-    ticker, bolsa = selector_ticker("seg")
-    if st.button("Añadir a seguimiento", type="primary"):
+    una, varias = st.tabs(["Añadir una", "Añadir varias"])
+    with varias:
+        v1, v2 = st.columns([1, 3])
+        bolsa_lote = v1.selectbox("Bolsa", BOLSAS, key="lote_bolsa", format_func=lambda x: ETIQUETA_BOLSA.get(x, x))
+        texto_lote = v2.text_area("Tickers separados por comas", key="lote_texto", height=80,
+                                  placeholder="AVGO, NKE, ADBE, MCD…")
+        if st.button("Añadir todas", type="primary", key="lote_btn"):
+            lista = list(dict.fromkeys(x.strip().upper() for x in texto_lote.replace(";", ",").replace("\n", ",").split(",") if x.strip()))
+            if not lista:
+                st.warning("Pega al menos un ticker.")
+            else:
+                añadidos, ya, errores = añadir_lote(lista, bolsa_lote)
+                if añadidos:
+                    st.success(f"Añadidas {len(añadidos)}: {', '.join(añadidos)}")
+                if ya:
+                    st.info(f"{ya} ya estaban en la lista; sus datos se han actualizado.")
+                for e in errores:
+                    st.warning(e)
+    with una:
+        ticker, bolsa = selector_ticker("seg")
+        anadir_una = st.button("Añadir a seguimiento", type="primary")
+    if anadir_una:
         if not ticker:
             st.warning("Escribe un ticker o búscalo por nombre.")
         else:
@@ -66,10 +110,19 @@ if seg.empty:
     st.info("Todavía no hay acciones en seguimiento. Añade la primera arriba.")
     st.stop()
 
-solo_fav = st.toggle("Solo favoritas", key="solo_fav")
-base = seg[seg["Favorita"]] if solo_fav else seg
+f1, f2 = st.columns([1, 2])
+bolsas_lista = [b for b in BOLSAS if b in set(seg["Bolsa"])]
+filtro_bolsa = f1.selectbox("Bolsa", ["Todas"] + bolsas_lista, key="filtro_bolsa",
+                            format_func=lambda x: ETIQUETA_BOLSA.get(x, x))
+f2.write(""); f2.write("")
+solo_fav = f2.toggle("Solo favoritas", key="solo_fav")
+base = seg
+if filtro_bolsa != "Todas":
+    base = base[base["Bolsa"] == filtro_bolsa]
+if solo_fav:
+    base = base[base["Favorita"]]
 if base.empty:
-    st.info("No tienes favoritas marcadas.")
+    st.info("No hay acciones con estos filtros.")
     st.stop()
 
 d = base[["Ticker", "Bolsa", "Favorita"]].merge(datos, on="Ticker", how="left", suffixes=("_seg", ""))
@@ -80,6 +133,7 @@ tabla = pd.DataFrame({
     "★": d["Favorita"].map({True: "★", False: ""}),
     "Ticker": d["Ticker"],
     "Nombre": d.get("Nombre"),
+    "Bolsa": d["Bolsa_seg"].map(lambda x: ETIQUETA_BOLSA.get(x, x)),
     "Último precio": p,
     "Var. día %": num("Variación día %"),
     "Rango 52 sem": [f"{fmt(a)} – {fmt(b)}" for a, b in zip(num("Mínimo 52 sem"), num("Máximo 52 sem"))],
@@ -117,6 +171,21 @@ xls = io.BytesIO()
 tabla.to_excel(xls, index=False, sheet_name="Seguimiento")
 c3.download_button("Descargar Excel", xls.getvalue(), file_name="seguimiento.xlsx",
                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+
+with st.expander("🗑️ Quitar varias de la lista"):
+    nombres = dict(zip(seg["Ticker"], seg["Nombre"]))
+    quitar = st.multiselect("Marca las que quieres quitar", list(seg["Ticker"]), key="quitar_multi",
+                            format_func=lambda t: f"{t} · {nombres.get(t, '')}")
+    q1, q2 = st.columns([1, 3])
+    conf_multi = q1.checkbox("Confirmar", key="quitar_conf")
+    def _quitar_varias():
+        hoja.quitar_varias(st.session_state["quitar_multi"])
+        hoja.limpiar_cache()
+        st.session_state["quitar_multi"] = []          # vaciar la selección (esas acciones ya no existen)
+        st.session_state["quitar_conf"] = False
+    q2.button(f"Quitar {len(quitar)} seleccionadas", disabled=not (quitar and conf_multi), key="quitar_btn",
+              on_click=_quitar_varias)
+    st.caption("Se quitan de tu lista y de «Datos». Su histórico se conserva.")
 
 # ---------------- Acciones sobre la fila seleccionada ----------------
 sel = ev.selection.rows if ev and ev.selection else []

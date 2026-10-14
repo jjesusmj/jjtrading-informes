@@ -77,6 +77,30 @@ def añadir_seguimiento(ticker, nombre, bolsa, moneda):
     return True
 
 
+def añadir_varias(filas_seg):
+    """filas_seg: lista de (ticker, nombre, bolsa, moneda). Añade las que no estén ya. Devuelve los tickers añadidos."""
+    ws = _pestaña(SEG)
+    existentes = set(ws.col_values(1)[1:])
+    hoy = datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y-%m-%d")
+    nuevas, añadidos = [], []
+    for t, n, b, m in filas_seg:
+        if t not in existentes:
+            nuevas.append([t, n, b, m, "No", hoy]); añadidos.append(t); existentes.add(t)
+    if nuevas:
+        ws.append_rows(nuevas, value_input_option="RAW")
+    return añadidos
+
+
+def quitar_varias(tickers):
+    """Quita varias acciones de tu lista y de Datos (de abajo arriba, para no descolocar filas). El Histórico se conserva."""
+    tickers = set(tickers)
+    for nombre, col in ((SEG, 1), (DATOS, 3)):
+        ws = _pestaña(nombre)
+        filas = [i for i, v in enumerate(ws.col_values(col), start=1) if i > 1 and v in tickers]
+        for i in sorted(filas, reverse=True):
+            ws.delete_rows(i)
+
+
 def _fila_de(ws, ticker, col):
     vals = ws.col_values(col)
     for i, v in enumerate(vals[1:], start=2):
