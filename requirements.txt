@@ -1,5 +1,8 @@
-streamlit>=1.38
+streamlit>=1.50
 yfinance>=0.2.54
 pandas>=2.0
 numpy>=1.26
 deep-translator>=1.11
+gspread>=6.0
+google-auth>=2.0
+openpyxl>=3.1

@@ -411,6 +411,66 @@ def generar(ticker, bolsa="EEUU"):
     <br>Informe automático con fines de análisis personal. No es una recomendación de inversión.</div>
     </div></body></html>'''
 
-    return {"ticker": TICKER, "html": INFORME, "fecha": f"{hoy:%Y-%m-%d}",
+    # ---------------- Fila completa para Google Sheets (Datos / Histórico) ----------------
+    # Mismas variables que el informe: no se recalcula nada.
+    ahora = pd.Timestamp.now(tz="Europe/Madrid")
+    def r4(x): return None if x is None or (isinstance(x, float) and math.isnan(x)) else round(float(x), 4)
+    conf_d = {a: (b, cmt) for a, b, cmt in conf}
+    fila = {
+        "Fecha": f"{ahora:%Y-%m-%d}", "Hora actualización": f"{ahora:%Y-%m-%d %H:%M}",
+        "Ticker": TICKER, "Nombre": nombre, "Bolsa": bolsa, "Moneda": moneda, "Sector": sector,
+        "Último precio": r4(P), "Cierre anterior": r4(P_ant), "Variación día %": r4((P / P_ant - 1) * 100),
+        "Mínimo 52 sem": r4(min52), "Máximo 52 sem": r4(max52), "Distancia máx 52 sem %": r4((P / max52 - 1) * 100),
+        "Capitalización": mcap if mcap else None, "ATR 14": r4(atr), "ATR %": r4(atr / P * 100),
+        "Tendencia diaria": tendencia[0], "EMA 21": r4(e21), "EMA 55": r4(e55), "EMA 200": r4(e200),
+        "SuperTrend diario": "Alcista" if st[-1] == 1 else "Bajista",
+        "Estado": estado[0], "Distancia zona (ATR)": r4((P - zona_alta) / atr), "Soporte": soporte_nombre,
+        "Zona baja": r4(zona_baja), "Zona alta": r4(zona_alta), "Entrada ref.": r4(entrada), "Stop": r4(stop),
+        "Regla stop": regla_stop, "Objetivo 1": r4(obj1), "Origen obj. 1": origen1, "Objetivo 2": r4(obj2),
+        "Origen obj. 2": origen2, "Riesgo %": r4(riesgo_pct), "Riesgo por acción": r4(R), "Ratio B/R": r4(ratio),
+        "% hasta obj. 1": r4((obj1 / entrada - 1) * 100),
+        "SuperTrend 1H": conf_d.get("SuperTrend 1H", ("", ""))[0],
+        "Último giro ST 1H": conf_d.get("SuperTrend 1H", ("", ""))[1].replace("último giro alcista: ", ""),
+        "Último CHoCH 1H": conf_d.get("CHoCH alcista 1H", ("", ""))[1].replace("último: ", ""),
+        "MACD 1H": conf_d.get("Cruce MACD 1H", ("", ""))[0],
+        "Próximos resultados": f"{proximos:%Y-%m-%d}" if proximos is not None else "",
+        "Avisos": " | ".join(avisos),
+    }
+
+    return {"ticker": TICKER, "html": INFORME, "fecha": f"{hoy:%Y-%m-%d}", "nombre": nombre, "moneda": moneda,
+            "fila": fila,
             "resumen": {"estado": estado[0], "zona": (zona_baja, zona_alta), "stop": stop, "obj1": obj1, "obj2": obj2,
                         "riesgo_pct": riesgo_pct, "ratio": ratio, "moneda": moneda}}
+
+
+# ---------------- Búsqueda de tickers por nombre ----------------
+# Códigos de bolsa de Yahoo → clave de BOLSAS que usa generar()
+EXCHANGE_A_BOLSA = {"NYQ": "EEUU", "NMS": "EEUU", "NGM": "EEUU", "NCM": "EEUU", "ASE": "EEUU", "PCX": "EEUU",
+                    "NYS": "EEUU", "NAS": "EEUU", "BTS": "EEUU",
+                    "MCE": "MADRID", "PAR": "PARIS", "MIL": "MILAN", "GER": "FRANCFORT", "FRA": "FRANCFORT",
+                    "AMS": "AMSTERDAM", "LSE": "LONDRES", "LIS": "LISBOA", "EBS": "SUIZA", "BRU": "BRUSELAS",
+                    "TOR": "TORONTO"}
+FILTROS_BUSQUEDA = ["EEUU", "MADRID", "PARIS", "MILAN", "Todas las bolsas"]
+
+
+def buscar(texto, filtro="Todas las bolsas", max_resultados=25):
+    """Busca acciones por nombre en Yahoo. Devuelve lista de dicts: simbolo, nombre, bolsa (clave), exchange."""
+    texto = (texto or "").strip()
+    if len(texto) < 2:
+        return []
+    quotes = yf.Search(texto, max_results=max_resultados, news_count=0, lists_count=0,
+                       include_cb=False, raise_errors=False).quotes or []
+    salida, vistos = [], set()
+    for q in quotes:
+        if q.get("quoteType") != "EQUITY":
+            continue
+        b = EXCHANGE_A_BOLSA.get(q.get("exchange", ""))
+        if b is None or (filtro != "Todas las bolsas" and b != filtro):
+            continue
+        sim = q.get("symbol", "")
+        if not sim or sim in vistos:
+            continue
+        vistos.add(sim)
+        salida.append({"simbolo": sim, "nombre": q.get("longname") or q.get("shortname") or sim,
+                       "bolsa": b, "exchange": q.get("exchDisp") or q.get("exchange", "")})
+    return salida
