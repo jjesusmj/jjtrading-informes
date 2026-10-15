@@ -62,9 +62,17 @@ def leer_datos():
     return pd.DataFrame(filas) if filas else pd.DataFrame(columns=_cabecera(ws))
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def leer_historico():
+    ws = _pestaña(HIST)
+    filas = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
+    return pd.DataFrame(filas) if filas else pd.DataFrame(columns=_cabecera(ws))
+
+
 def limpiar_cache():
     leer_seguimiento.clear()
     leer_datos.clear()
+    leer_historico.clear()
 
 
 # ---------------- Seguimiento ----------------
@@ -139,8 +147,21 @@ def guardar_foto(fila):
     guardar_fotos([fila])
 
 
+def _asegurar_columnas(ws, cab, filas):
+    """Si la fila trae campos nuevos (p. ej. «Resistencias»), los añade al final de la cabecera."""
+    nuevas = [k for f in filas for k in f if k not in cab]
+    nuevas = list(dict.fromkeys(nuevas))
+    if not nuevas:
+        return cab
+    total = len(cab) + len(nuevas)
+    if ws.col_count < total:
+        ws.add_cols(total - ws.col_count)
+    ws.update([nuevas], gspread.utils.rowcol_to_a1(1, len(cab) + 1), value_input_option="RAW")
+    return cab + nuevas
+
+
 def _escribir(ws, filas, clave, cols_clave):
-    cab = _cabecera(ws)
+    cab = _asegurar_columnas(ws, _cabecera(ws), filas)
     columnas = [ws.col_values(cab.index(c) + 1) for c in cols_clave]
     existentes = {}
     for n, vals in enumerate(zip(*columnas), start=1):
@@ -158,3 +179,21 @@ def _escribir(ws, filas, clave, cols_clave):
         ws.batch_update(actualizar, value_input_option="RAW")
     if nuevas:
         ws.append_rows(nuevas, value_input_option="RAW")
+
+
+# ---------------- Resultados (comparación de informes con el precio real) ----------------
+RES = "Resultados"
+
+
+def guardar_resultados(filas):
+    """Sustituye la pestaña «Resultados» por el último cálculo. La crea si no existe."""
+    if not filas:
+        return
+    libro = _libro()
+    try:
+        ws = libro.worksheet(RES)
+    except gspread.WorksheetNotFound:
+        ws = libro.add_worksheet(RES, rows=max(len(filas) + 10, 100), cols=len(filas[0]) + 2)
+    cab = list(filas[0].keys())
+    ws.clear()
+    ws.update([cab] + [_fila_a_lista(cab, f) for f in filas], "A1", value_input_option="RAW")

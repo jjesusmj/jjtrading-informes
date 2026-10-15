@@ -17,4 +17,5 @@ if clave and not st.session_state.get("ok"):
 st.navigation([
     st.Page("paginas/informe.py", title="Informe", icon="📈", default=True),
     st.Page("paginas/seguimiento.py", title="Seguimiento", icon="⭐"),
+    st.Page("paginas/resultados.py", title="Resultados", icon="🎯"),
 ]).run()

@@ -435,6 +435,8 @@ def generar(ticker, bolsa="EEUU"):
         "MACD 1H": conf_d.get("Cruce MACD 1H", ("", ""))[0],
         "Próximos resultados": f"{proximos:%Y-%m-%d}" if proximos is not None else "",
         "Avisos": " | ".join(avisos),
+        # Resistencias por encima de la entrada, para comparar después con lo que hizo el precio
+        "Resistencias": ";".join(f"{x:.4f}" for x in res_arriba[:8]),
     }
 
     return {"ticker": TICKER, "html": INFORME, "fecha": f"{hoy:%Y-%m-%d}", "nombre": nombre, "moneda": moneda,

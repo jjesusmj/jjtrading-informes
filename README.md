@@ -10,6 +10,8 @@ Datos de Yahoo Finance. Mismo método que el cuaderno de Colab.
 |---|---|
 | `app.py` | La pantalla: casilla de ticker, selector de bolsa y botón |
 | `niveles.py` | El cálculo de niveles y el informe (reglas calibradas; no cambiar parámetros sin recalibrar) |
+| `paginas/resultados.py` | Pestaña Resultados: compara los niveles de cada informe guardado con lo que hizo el precio |
+| `evaluacion.py` | Reglas de esa comparación (activación, stop, objetivos, caducidad, plazo, resistencias) |
 | `requirements.txt` | Librerías que instala Streamlit Cloud |
 | `.streamlit/config.toml` | Colores de la app |
 
@@ -42,6 +44,21 @@ Queda como un icono más del iPhone.
 ## Actualizar
 
 Cualquier cambio que se suba a GitHub en la rama `main` se publica solo en 1-2 minutos.
+
+## Pestaña Resultados
+
+Lee la pestaña «Histórico» de la hoja y, para cada informe, descarga de Yahoo las velas posteriores
+(sin ajustar por dividendos, solo horario regular) y decide con velas de 1H:
+
+- Se activa cuando el mínimo de una vela toca la zona. Entrada al techo de la zona, o a la apertura si abre por debajo.
+- Caduca a las 20 sesiones sin activarse.
+- Abierta, sigue hasta T2, stop o 60 sesiones (plazo del método). T1 se registra pero no cierra.
+- Si una vela toca stop y objetivo, cuenta stop. Si abre por debajo del stop, sale a la apertura.
+- Resistencia testeada: máximo a menos del 0,5 % sin cerrar encima.
+- Splits posteriores al informe: los niveles se dividen por el ratio del split.
+
+El botón «Guardar resultados en la hoja» escribe la pestaña «Resultados» (se crea sola).
+Los informes nuevos guardan también la columna «Resistencias»; se añade sola a la cabecera.
 
 ## Si falla
 

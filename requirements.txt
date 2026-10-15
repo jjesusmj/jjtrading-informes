@@ -6,3 +6,4 @@ deep-translator>=1.11
 gspread>=6.0
 google-auth>=2.0
 openpyxl>=3.1
+plotly>=5.20
