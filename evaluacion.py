@@ -16,6 +16,8 @@ PLAZO_SES = 60          # sesiones máximas con la operación abierta (plazo del
 TEST_RES_PCT = 0.5      # un máximo a menos de este % de una resistencia cuenta como test
 LIMITE_1H_DIAS = 729    # Yahoo da 1H de los últimos 730 días
 LIMITE_5M_DIAS = 59     # Yahoo da 5 min de los últimos 60 días
+CONTEXTO_DIARIO_DIAS = 182   # en el gráfico diario, 6 meses antes del informe
+CONTEXTO_1H_SESIONES = 10    # en el gráfico 1H, 10 sesiones antes del informe
 
 ESTADOS = ["Pendiente", "Activado", "T1 alcanzado", "T2", "Stop", "Plazo", "Caducado", "Invalidado",
            "Sin datos", "Datos inválidos"]
@@ -37,10 +39,12 @@ def descargar(ticker, desde):
     Devuelve dict: h1 (velas 1H), d1 (velas diarias), splits (Serie fecha → ratio)."""
     tk = yf.Ticker(ticker)
     ahora = pd.Timestamp.now(tz="UTC")
-    inicio_1h = max(desde.tz_convert("UTC"), ahora - pd.Timedelta(days=LIMITE_1H_DIAS))
+    # Se descarga también contexto previo, solo para el gráfico; el estado usa velas posteriores al informe
+    inicio_1h = max(desde.tz_convert("UTC") - pd.Timedelta(days=CONTEXTO_1H_SESIONES * 2),
+                    ahora - pd.Timedelta(days=LIMITE_1H_DIAS))
     h1 = _limpiar(tk.history(start=inicio_1h.strftime("%Y-%m-%d"), interval="1h",
                              auto_adjust=False, prepost=False))
-    d1 = tk.history(start=(desde - pd.Timedelta(days=10)).strftime("%Y-%m-%d"), interval="1d",
+    d1 = tk.history(start=(desde - pd.Timedelta(days=CONTEXTO_DIARIO_DIAS + 10)).strftime("%Y-%m-%d"), interval="1d",
                     auto_adjust=False, prepost=False, actions=True)
     splits = d1["Stock Splits"] if "Stock Splits" in d1 else pd.Series(dtype=float)
     splits = splits[splits > 0]

@@ -198,27 +198,63 @@ def _etiqueta_vela(ts, diario):
     return t.strftime("%d/%m/%y") if diario else t.strftime("%d/%m %H:%M")
 
 
-def grafico(velas, inf, r, diario):
+def _f(x):
+    return f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def grafico(velas, inf, r, diario, corte):
+    """corte: lo anterior se dibuja atenuado (contexto previo al informe, o el día anterior en 5 min)."""
     if velas.empty:
         st.info("Yahoo no devuelve velas para este periodo.")
         return
     x = [_etiqueta_vela(t, diario) for t in velas.index]
-    fig = go.Figure(go.Candlestick(
-        x=x, open=velas["Open"], high=velas["High"], low=velas["Low"], close=velas["Close"], name="Precio",
-        increasing_line_color=COLOR["verde"], decreasing_line_color=COLOR["rojo"], showlegend=False))
+    idx = velas.index
+    antes = idx < corte
+    fig = go.Figure()
+    for mascara, opacidad, nombre in ((antes, 0.35, "Antes"), (~antes, 1.0, "Precio")):
+        if mascara.any():
+            vv = velas[mascara]
+            fig.add_trace(go.Candlestick(
+                x=[xi for xi, m in zip(x, mascara) if m], open=vv["Open"], high=vv["High"], low=vv["Low"],
+                close=vv["Close"], name=nombre, opacity=opacidad, showlegend=False,
+                increasing_line_color=COLOR["verde"], decreasing_line_color=COLOR["rojo"]))
+
+    # Escala ajustada a las velas visibles; los niveles fuera se señalan en el borde
+    lo, hi = float(velas["Low"].min()), float(velas["High"].max())
+    pad = max((hi - lo) * 0.06, hi * 0.002)
+    y0, y1 = lo - pad, hi + pad
+    dentro = lambda y: y0 <= y <= y1
     n = r["niveles"]
-    fig.add_hrect(y0=n["zona_baja"], y1=n["zona_alta"], fillcolor=COLOR["zona"], line_width=0,
-                  annotation_text="Zona", annotation_position="left", annotation_font_color=COLOR["verde"])
-    for y, txt, col, dash in [(n["stop"], "Stop", COLOR["rojo"], "dash"), (n["obj1"], "T1", COLOR["verde"], "dot"),
-                              (n["obj2"], "T2", COLOR["verde"], "dash")]:
-        fig.add_hline(y=y, line_color=col, line_dash=dash, line_width=1.5, annotation_text=f"{txt} {y:.2f}",
-                      annotation_position="right", annotation_font_color=col)
-    for res in n.get("resistencias", []):
-        if res not in (n["obj1"], n["obj2"]):
-            fig.add_hline(y=res, line_color=COLOR["gris"], line_dash="dot", line_width=1, opacity=0.6)
+    arriba, abajo = [], []
+    if n["zona_alta"] >= y0 and n["zona_baja"] <= y1:
+        fig.add_hrect(y0=max(n["zona_baja"], y0), y1=min(n["zona_alta"], y1), fillcolor=COLOR["zona"], line_width=0,
+                      annotation_text="Zona", annotation_position="top left", annotation_font_color=COLOR["verde"])
+    else:
+        (arriba if n["zona_baja"] > y1 else abajo).append(
+            (n["zona_baja"], f"Zona {_f(n['zona_baja'])}–{_f(n['zona_alta'])}", COLOR["verde"]))
+    lineas = [(n["stop"], "Stop", COLOR["rojo"], "dash"), (n["obj1"], "T1", COLOR["verde"], "dot"),
+              (n["obj2"], "T2", COLOR["verde"], "dash")]
+    lineas += [(res, "Res.", COLOR["gris"], "dot") for res in n.get("resistencias", [])
+               if all(abs(res / y - 1) > 0.0005 for y in (n["obj1"], n["obj2"]))]
+    for y, txt, col, dash in lineas:
+        if dentro(y):
+            fig.add_hline(y=y, line_color=col, line_dash=dash, line_width=1.5 if txt != "Res." else 1,
+                          opacity=1 if txt != "Res." else 0.6, annotation_text=f"{txt} {_f(y)}",
+                          annotation_position="right", annotation_font_color=col)
+        else:
+            (arriba if y > y1 else abajo).append((y, f"{txt} {_f(y)}", col))
+    arriba.sort(key=lambda t: -t[0])          # arriba del todo, el más alto
+    abajo.sort(key=lambda t: t[0])            # abajo del todo, el más bajo
+    for k, (_, txt, col) in enumerate(arriba):
+        fig.add_annotation(xref="paper", yref="paper", x=0.995, y=0.99 - k * 0.055, xanchor="right", yanchor="top",
+                           text=f"↑ {txt}", showarrow=False, font=dict(color=col, size=12),
+                           bgcolor="rgba(7,19,13,0.75)")
+    for k, (_, txt, col) in enumerate(abajo):
+        fig.add_annotation(xref="paper", yref="paper", x=0.995, y=0.01 + k * 0.055, xanchor="right", yanchor="bottom",
+                           text=f"↓ {txt}", showarrow=False, font=dict(color=col, size=12),
+                           bgcolor="rgba(7,19,13,0.75)")
 
     # Marcadores: salen del estado calculado (iguales en todas las temporalidades)
-    idx = velas.index
     simbolos = {"Entrada": ("triangle-up", COLOR["ambar"]), "T1": ("circle", COLOR["verde"]),
                 "T2": ("star", COLOR["verde"]), "Stop": ("x", COLOR["rojo"]), "Plazo": ("square", COLOR["ambar"]),
                 "Caducado": ("square", COLOR["gris"]), "Invalidado": ("x", COLOR["gris"])}
@@ -232,25 +268,50 @@ def grafico(velas, inf, r, diario):
             continue
         sym, col = simbolos.get(e["tipo"], ("circle", COLOR["texto"]))
         y = e["precio"] if e["precio"] is not None else velas["Close"].iloc[pos]
+        if not dentro(y):
+            y = velas["Close"].iloc[pos]
         fig.add_trace(go.Scatter(x=[x[pos]], y=[y], mode="markers+text", text=[e["tipo"]], textposition="top center",
                                  marker=dict(symbol=sym, size=13, color=col, line=dict(width=1, color=COLOR["fondo"])),
                                  textfont=dict(color=col), showlegend=False, hovertext=e["texto"]))
     ini = inf["fecha"].tz_convert(idx.tz)
     pos = idx.searchsorted(ini.normalize() if diario else ini)
-    if 0 <= pos < len(idx):
-        fig.add_vline(x=pos, line_color=COLOR["gris"], line_dash="dot", line_width=1)
+    if 0 < pos < len(idx):
+        fig.add_vline(x=pos - 0.5, line_color=COLOR["gris"], line_dash="dot", line_width=1,
+                      annotation_text="Informe", annotation_position="top", annotation_font_color=COLOR["gris"])
 
     fig.update_layout(height=520, margin=dict(l=10, r=70, t=10, b=10), paper_bgcolor=COLOR["fondo"],
                       plot_bgcolor=COLOR["panel"], font_color=COLOR["texto"], xaxis_rangeslider_visible=False,
                       dragmode="pan", hovermode="x unified")
     fig.update_xaxes(type="category", nticks=8, showgrid=False)
-    fig.update_yaxes(gridcolor="rgba(255,255,255,0.06)")
+    fig.update_yaxes(gridcolor="rgba(255,255,255,0.06)", range=[y0, y1])
     st.plotly_chart(fig, width="stretch", config={"displaylogo": False, "scrollZoom": True})
 
 
 def _ver_dia(dia):
     st.session_state["tf_resultados"] = "5 min"
     st.session_state["dia_5m"] = dia
+
+
+def _dia_habil(dia, paso):
+    d = pd.Timestamp(dia) + pd.Timedelta(days=paso)
+    while d.dayofweek >= 5:
+        d += pd.Timedelta(days=paso)
+    return d
+
+
+def _mover_dia(paso):
+    st.session_state["dia_5m"] = _dia_habil(st.session_state["dia_5m"], paso).strftime("%Y-%m-%d")
+
+
+def _dia_5m_inicial(inf, r):
+    hoy = pd.Timestamp.now(tz=MADRID).normalize()
+    for ts in (r.get("fecha_entrada"), inf["fecha"]):
+        if ts is not None and ev.disponible_5m(pd.Timestamp(ts)):
+            return pd.Timestamp(ts).tz_convert(MADRID).strftime("%Y-%m-%d")
+    d = hoy
+    while d.dayofweek >= 5:
+        d -= pd.Timedelta(days=1)
+    return d.strftime("%Y-%m-%d")
 
 
 sel = ev_tabla.selection.rows if ev_tabla and ev_tabla.selection else []
@@ -271,43 +332,64 @@ if sel:
                 "para compararlos con los precios actuales.")
 
     datos = datos_ticker(inf["ticker"], min(i["fecha"] for i in visibles if i["ticker"] == inf["ticker"]).isoformat())
-    hay_5m = ev.disponible_5m(inf["fecha"]) or (r.get("fecha_salida") is None and r["estado"] in ev.ABIERTOS)
+    hay_5m = ev.disponible_5m(inf["fecha"]) or (r.get("fecha_salida") is None and r["estado"] in ev.ABIERTOS) \
+        or (r.get("fecha_salida") is not None and ev.disponible_5m(pd.Timestamp(r["fecha_salida"])))
     opciones = ["Diario", "1H"] + (["5 min"] if hay_5m else [])
     if st.session_state.get("tf_resultados") not in opciones or st.session_state.get("_detalle") != clave:
         st.session_state["tf_resultados"] = "1H" if ev.disponible_1h(inf["fecha"]) else "Diario"
         st.session_state["dia_5m"] = None
         st.session_state["_detalle"] = clave
     tf = st.segmented_control("Temporalidad", opciones, key="tf_resultados") or "1H"
-    if tf != "5 min":
-        st.session_state["dia_5m"] = None
     if not hay_5m:
         st.caption("Sin velas de 5 min: Yahoo solo las guarda de los últimos 60 días.")
 
-    inicio = inf["fecha"] - pd.Timedelta(days=3)
     fin = (pd.Timestamp(r["fecha_salida"]) if r.get("fecha_salida") is not None
            else pd.Timestamp.now(tz=MADRID)) + pd.Timedelta(days=3)
     if tf == "Diario":
         v = datos["d1"]
-        v = v[(v.index >= inicio.tz_convert(v.index.tz).normalize() - pd.Timedelta(days=10)) &
-              (v.index <= fin.tz_convert(v.index.tz))] if not v.empty else v
-        grafico(v, inf, r, diario=True)
+        if not v.empty:
+            tz = v.index.tz
+            v = v[(v.index >= (inf["fecha"] - pd.Timedelta(days=ev.CONTEXTO_DIARIO_DIAS)).tz_convert(tz).normalize())
+                  & (v.index <= fin.tz_convert(tz))]
+        corte = inf["fecha"].tz_convert(v.index.tz).normalize() if not v.empty else None
+        st.caption(f"Atenuado: los {ev.CONTEXTO_DIARIO_DIAS // 30} meses anteriores al informe.")
+        grafico(v, inf, r, diario=True, corte=corte)
     elif tf == "1H":
         v = datos["h1"]
-        v = v[(v.index >= inicio.tz_convert(v.index.tz)) & (v.index <= fin.tz_convert(v.index.tz))] if not v.empty else v
-        grafico(v, inf, r, diario=False)
+        if not v.empty:
+            tz = v.index.tz
+            ini = inf["fecha"].tz_convert(tz)
+            dias_antes = sorted({d for d in v.index[v.index < ini].date})[-ev.CONTEXTO_1H_SESIONES:]
+            desde = pd.Timestamp(dias_antes[0]).tz_localize(tz) if dias_antes else ini
+            v = v[(v.index >= desde) & (v.index <= fin.tz_convert(tz))]
+            corte = ini
+        else:
+            corte = None
+        st.caption(f"Atenuado: las {ev.CONTEXTO_1H_SESIONES} sesiones anteriores al informe.")
+        grafico(v, inf, r, diario=False, corte=corte)
     else:
-        dia = st.session_state.get("dia_5m")
-        ini5 = pd.Timestamp(dia) if dia else max(inf["fecha"].tz_convert(MADRID).normalize(),
-                                                 pd.Timestamp.now(tz=MADRID).normalize() - pd.Timedelta(days=ev.LIMITE_5M_DIAS))
-        fin5 = pd.Timestamp(dia) if dia else min(fin, pd.Timestamp.now(tz=MADRID))
-        if dia:
-            st.caption(f"Día {pd.Timestamp(dia):%d/%m/%Y} en 5 min.")
+        if not st.session_state.get("dia_5m"):
+            st.session_state["dia_5m"] = _dia_5m_inicial(inf, r)
+        dia = pd.Timestamp(st.session_state["dia_5m"])
+        hoy = pd.Timestamp.now(tz=MADRID).tz_localize(None).normalize()
+        previo = _dia_habil(dia, -1)
+        n1, n2, n3 = st.columns([1, 2, 1], vertical_alignment="center")
+        n1.button("◀ Día anterior", width="stretch", on_click=_mover_dia, args=(-1,),
+                  disabled=(hoy - previo).days > ev.LIMITE_5M_DIAS)
+        n2.markdown(f"<div style='text-align:center'><b>{dia:%d/%m/%Y}</b> en 5 min · atenuado el día anterior</div>",
+                    unsafe_allow_html=True)
+        n3.button("Día siguiente ▶", width="stretch", on_click=_mover_dia, args=(1,),
+                  disabled=_dia_habil(dia, 1) > hoy)
         try:
-            v = datos_5m(inf["ticker"], ini5.strftime("%Y-%m-%d"), fin5.strftime("%Y-%m-%d"))
+            v = datos_5m(inf["ticker"], previo.strftime("%Y-%m-%d"), dia.strftime("%Y-%m-%d"))
         except Exception as e:
             v = pd.DataFrame()
             st.error(f"No se pudieron descargar las velas de 5 min: {e}")
-        grafico(v, inf, r, diario=False)
+        if not v.empty and not (v.index.date == dia.date()).any():
+            st.info("Ese día no hubo sesión (festivo o sin datos). Usa las flechas para cambiar de día.")
+            v = v.iloc[0:0]
+        corte = pd.Timestamp(dia.date()).tz_localize(v.index.tz) if not v.empty else None
+        grafico(v, inf, r, diario=False, corte=corte)
 
     c1, c2 = st.columns([3, 2])
     with c1:
