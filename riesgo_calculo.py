@@ -600,8 +600,10 @@ def calcular(R):
     corte_f = _fecha(corte)
     dpa = sum(a for d, a in (R.get("dividendos") or []) if (corte_f - _fecha(d)).days <= 365)
     D["dividendo"] = {"dpa": dpa, "rent": dpa / P * 100 if P else None}
+    D["descripcion_en"] = R.get("descripcion")
     D["descripcion"] = R.get("descripcion_es") or R.get("descripcion")
     D["descripcion_traducida"] = bool(R.get("descripcion_es"))
+    D["traduccion_error"] = None
     from traducciones import INDUSTRIAS, SECTORES
     D["sector_es"] = R.get("sector_es") or SECTORES.get(R.get("sector"), R.get("sector"))
     D["industria_es"] = R.get("industria_es") or INDUSTRIAS.get(R.get("industria"), R.get("industria"))
@@ -707,7 +709,7 @@ def evolucion(R):
             ini, fin = m[-1 - n], m[-1]
         p = fin[1] / ini[1] - 1
         t = fin[2] / ini[2] - 1
-        out["rent"][anos] = {"precio": p * 100, "total": t * 100, "desde": ini[0],
+        out["rent"][anos] = {"precio": p * 100, "total": t * 100, "desde": ini[0], "base": ini[1],
                              "anual_precio": ((1 + p) ** (1 / anos) - 1) * 100, "anual_total": ((1 + t) ** (1 / anos) - 1) * 100}
     if 1 not in out["rent"]:
         return None

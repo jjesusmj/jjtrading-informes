@@ -246,3 +246,29 @@ def ultima_nota_riesgo():
     df["Nota"] = pd.to_numeric(df["Nota"], errors="coerce")
     df = df.dropna(subset=["Nota"]).sort_values("Fecha")
     return {t: (int(g["Nota"].iloc[-1]), str(g["Fecha"].iloc[-1])[:10]) for t, g in df.groupby("Ticker")}
+
+
+# ---------------- Traducciones (la descripción de cada empresa se traduce una vez y se guarda) ----------------
+TRAD = "Traducciones"
+
+
+def leer_traduccion(ticker, texto_en):
+    try:
+        ws = _libro().worksheet(TRAD)
+    except gspread.WorksheetNotFound:
+        return None
+    for f in ws.get_all_records():
+        if f.get("Ticker") == ticker and f.get("Inglés") == texto_en and f.get("Castellano"):
+            return f["Castellano"]
+    return None
+
+
+def guardar_traduccion(ticker, texto_en, texto_es):
+    libro = _libro()
+    try:
+        ws = libro.worksheet(TRAD)
+    except gspread.WorksheetNotFound:
+        ws = libro.add_worksheet(TRAD, rows=500, cols=4)
+    hoy = datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y-%m-%d")
+    _escribir(ws, [{"Ticker": ticker, "Inglés": texto_en, "Castellano": texto_es, "Fecha": hoy}],
+              clave=lambda f: f["Ticker"], cols_clave=["Ticker"])

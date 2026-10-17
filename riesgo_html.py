@@ -304,18 +304,52 @@ def svg_per(h):
 
 
 
-def svg_spark(serie, sube):
+SIMBOLO = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
+
+
+def dinero(x, mon):
+    s = SIMBOLO.get(mon)
+    return f"{es(x, 2)}{s}" if s else f"{es(x, 2)} {E(mon or '')}".strip()
+
+
+def svg_spark(serie, base):
+    """Gráfica de línea base: verde por encima del precio de hace un año, rojo por debajo."""
     c = [v for _, v in serie]
     if len(c) < 2:
         return ""
-    W, H = 420, 90
-    lo, hi = min(c), max(c)
-    pts = [(i / (len(c) - 1) * W, 6 + (1 - (v - lo) / ((hi - lo) or 1)) * (H - 12)) for i, v in enumerate(c)]
-    linea = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
-    col = "#15803d" if sube else "#dc2626"
-    fondo = "#e8f3ec" if sube else "#fbeaea"
-    return (f'<svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" style="width:100%;height:90px" role="img" aria-label="Precio de 12 meses">'
-            f'<polygon fill="{fondo}" points="0,{H} {linea} {W},{H}"/><polyline fill="none" stroke="{col}" stroke-width="2" points="{linea}"/></svg>')
+    W, H, pl, pr, pt, pb = 680, 200, 6, 96, 30, 26
+    vals = c + ([base] if base else [])
+    lo, hi = min(vals), max(vals)
+    X = lambda i: pl + i / (len(c) - 1) * (W - pl - pr)
+    Y = lambda v: pt + (1 - (v - lo) / ((hi - lo) or 1)) * (H - pt - pb)
+    pts = " ".join(f"{X(i):.1f},{Y(v):.1f}" for i, v in enumerate(c))
+    last = len(c) - 1
+    im, imn = c.index(max(c)), c.index(min(c))
+    o = [f'<svg viewBox="0 0 {W} {H}" style="width:100%;height:auto" role="img" aria-label="Precio de 12 meses frente al precio de hace un año">']
+    if base:
+        yb = Y(base)
+        area = f"{X(0):.1f},{yb:.1f} {pts} {X(last):.1f},{yb:.1f}"
+        o.append(f'<defs><clipPath id="sp-arr"><rect x="0" y="0" width="{W}" height="{yb:.1f}"/></clipPath>'
+                 f'<clipPath id="sp-abj"><rect x="0" y="{yb:.1f}" width="{W}" height="{H - yb:.1f}"/></clipPath></defs>'
+                 f'<polygon points="{area}" fill="#e3f1e6" clip-path="url(#sp-arr)"/><polygon points="{area}" fill="#fbe4e4" clip-path="url(#sp-abj)"/>'
+                 f'<polyline points="{pts}" fill="none" stroke="#15803d" stroke-width="2.4" clip-path="url(#sp-arr)"/>'
+                 f'<polyline points="{pts}" fill="none" stroke="#dc2626" stroke-width="2.4" clip-path="url(#sp-abj)"/>'
+                 f'<line x1="{pl}" x2="{W - pr}" y1="{yb:.1f}" y2="{yb:.1f}" stroke="#8a92a0" stroke-dasharray="7 5" stroke-width="1.5"/>'
+                 f'<text x="{W - pr + 8}" y="{yb + 6:.1f}" font-size="19" fill="#5b6474">{es(base, 2)}</text>')
+    else:
+        o.append(f'<polyline points="{pts}" fill="none" stroke="#0f172a" stroke-width="2.4"/>')
+    col_hoy = "#15803d" if not base or c[-1] >= base else "#dc2626"
+    xm = min(max(X(im), 70), W - pr - 70)
+    o.append(f'<circle cx="{X(im):.1f}" cy="{Y(c[im]):.1f}" r="5" fill="#15803d"/>'
+             f'<text x="{xm:.1f}" y="{Y(c[im]) - 10:.1f}" font-size="19" fill="#15803d" text-anchor="middle">Máx. {es(c[im], 2)}</text>')
+    if imn != last:
+        cerca = X(imn) > W - pr - 140
+        xn = X(imn) - 10 if cerca else min(max(X(imn), 70), W - pr - 70)
+        o.append(f'<circle cx="{X(imn):.1f}" cy="{Y(c[imn]):.1f}" r="5" fill="#dc2626"/>'
+                 f'<text x="{xn:.1f}" y="{Y(c[imn]) + (6 if cerca else 26):.1f}" font-size="19" fill="#dc2626" text-anchor="{"end" if cerca else "middle"}">Mín. {es(c[imn], 2)}</text>')
+    o.append(f'<circle cx="{X(last):.1f}" cy="{Y(c[last]):.1f}" r="6" fill="{col_hoy}"/>'
+             f'<text x="{X(last) + 10:.1f}" y="{Y(c[last]) + (6 if imn != last else 6):.1f}" font-size="19" font-weight="700" fill="{col_hoy}">Hoy</text></svg>')
+    return "".join(o)
 
 
 def svg_evol(m, meses, pid):
@@ -401,17 +435,20 @@ def sec_resumen(D):
          f'<div class="precio"><div><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:flex-start">'
          f'<div><span class="big m">{es(D["precio"], 2)}</span> <span class="m" style="color:var(--mut)">{E(mon)}</span></div>{prox}</div>'
          + (f'{_pill("verde" if r12 >= 0 else "rojo", ("▲ " if r12 >= 0 else "▼ ") + es(r12, pct=True, signo=True))} '
-            f'<span style="color:var(--mut);font-size:13px">en un año (desde el {_fmt_fecha(r1.get("desde"))})</span>' if r12 is not None else "")
+            f'<span style="color:var(--mut);font-size:13.5px">· <span style="white-space:nowrap">hace un año {dinero(r1["base"], mon)}</span> '
+            f'<span style="white-space:nowrap">→ hoy {dinero(D["precio"], mon)}</span></span>' if r12 is not None else "")
          + f'<div style="color:var(--mut);font-size:13px;margin-top:4px">Cierre del {_fmt_fecha(D["corte"])} · Capitalización {millones(D["mcap"], mon)}<br>'
          f'Cuentas hasta el {_fmt_fecha(D["fecha_cuentas"])}</div>'
          f'<div class="m" style="display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:12px"><span>Mín. 52 sem. {es(T["min52"], 2)}</span><span>Máx. {es(T["max52"], 2)}</span></div>'
          f'<div class="bar52"><i style="left:calc({pos52:.1f}% - 1px)"></i></div></div>'
-         f'<div>{svg_spark(D["serie"], (r12 or 0) >= 0)}<div class="leg" style="text-align:right">Cierres diarios de 12 meses</div></div></div>']
+         f'<div>{svg_spark(D["serie"], r1.get("base"))}<div class="leg" style="text-align:right">12 meses · <b style="color:var(--v)">verde</b>: por encima del precio de hace un año · '
+         f'<b style="color:var(--r)">rojo</b>: por debajo</div></div></div>']
     for a in D["avisos"]:
         o.append(f'<div class="aviso">⚠ {E(a)}</div>')
     if D.get("descripcion"):
         o.append(f'<div class="sec"><h2>¿A qué se dedica?</h2><p style="margin:6px 0 0">{E(D["descripcion"])}</p>'
-                 + ('' if D.get("descripcion_traducida") else '<p class="nota-pie">Texto original de Yahoo: no se ha podido traducir.</p>')
+                 + ('' if D.get("descripcion_traducida") else '<p class="nota-pie">Texto original de Yahoo: no se ha podido traducir'
+                    + (f' ({E(D["traduccion_error"])})' if D.get("traduccion_error") else '') + '.</p>')
                  + '</div>')
     if D["areas"] or D["esencial"]:
         o.append('<div class="sec"><div class="eh"><h2>Lo esencial</h2><span>por áreas</span></div>')

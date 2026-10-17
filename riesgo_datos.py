@@ -95,8 +95,7 @@ def descargar(simbolo):
     R["sector"], R["industria"] = ap.get("sector"), ap.get("industry")
     R["sector_es"], R["industria_es"] = traducir(R["sector"], SECTORES), traducir(R["industria"], INDUSTRIAS)
     R["descripcion"] = primeras_frases(ap.get("longBusinessSummary"), 2)
-    es = traducir(R["descripcion"]) if R["descripcion"] else ""
-    R["descripcion_es"] = es if es and es != R["descripcion"] else None
+
     R["acciones"] = _v(ks.get("sharesOutstanding"))
     tr = {e.get("period"): _v(e.get("growth")) for e in (q.get("earningsTrend") or {}).get("trend") or []}
     R["consenso"] = {"objetivo": _v(fd.get("targetMeanPrice")), "analistas": _v(fd.get("numberOfAnalystOpinions")),

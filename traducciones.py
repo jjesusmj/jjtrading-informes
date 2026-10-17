@@ -70,3 +70,27 @@ def primeras_frases(txt, n=2):
     if actual and len(frases) < n:
         frases.append(actual)
     return " ".join(frases)
+
+
+def traducir_texto(txt):
+    """Traduce al castellano probando dos traductores gratuitos. Devuelve (texto, None) o (None, motivo del fallo)."""
+    if not txt:
+        return None, "sin texto"
+    errores = []
+    try:
+        from deep_translator import GoogleTranslator
+        t = GoogleTranslator(source="en", target="es").translate(txt)
+        if t and t.strip() and t.strip() != txt.strip():
+            return t.strip(), None
+        errores.append("Google devolvió el texto sin traducir")
+    except Exception as e:
+        errores.append(f"Google: {type(e).__name__}: {str(e)[:120]}")
+    try:
+        from deep_translator import MyMemoryTranslator
+        t = MyMemoryTranslator(source="en-GB", target="es-ES").translate(txt)
+        if t and t.strip() and t.strip() != txt.strip():
+            return t.strip(), None
+        errores.append("MyMemory devolvió el texto sin traducir")
+    except Exception as e:
+        errores.append(f"MyMemory: {type(e).__name__}: {str(e)[:120]}")
+    return None, " · ".join(errores)

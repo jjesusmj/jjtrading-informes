@@ -9,6 +9,7 @@ from niveles import ErrorInforme, ticker_yahoo
 from riesgo_calculo import calcular
 from riesgo_datos import ErrorRiesgo, descargar
 from riesgo_html import generar_html
+from traducciones import traducir_texto
 
 st.markdown("## JJTrading_ · Riesgo")
 st.caption("Nota de 0 a 100 con datos de Yahoo Finance. Todos los ratios se calculan en la app. No incluye entradas, stops ni recomendaciones.")
@@ -31,6 +32,47 @@ def guardar_y_leer(D):
     return hoja.historial_riesgo(D["ticker"])
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def _traducir_ok(texto):
+    t, error = traducir_texto(texto)
+    if not t:
+        raise RuntimeError(error)          # los fallos no se guardan en caché: se reintenta la próxima vez
+    return t
+
+
+def traducir_cacheado(texto):
+    try:
+        return _traducir_ok(texto), None
+    except Exception as e:
+        return None, str(e)
+
+
+def traducir_descripcion(D):
+    """Primero la hoja de Google (traducción ya guardada); si no está, dos traductores; si sale bien, se guarda."""
+    en = D.get("descripcion_en")
+    if not en or D.get("descripcion_traducida"):
+        return
+    usar_hoja = hoja.configurada()
+    if usar_hoja:
+        try:
+            guardada = hoja.leer_traduccion(D["ticker"], en)
+            if guardada:
+                D.update(descripcion=guardada, descripcion_traducida=True)
+                return
+        except Exception:
+            usar_hoja = False
+    es_, error = traducir_cacheado(en)
+    if es_:
+        D.update(descripcion=es_, descripcion_traducida=True)
+        if usar_hoja:
+            try:
+                hoja.guardar_traduccion(D["ticker"], en, es_)
+            except Exception:
+                pass
+    else:
+        D.update(descripcion=en, descripcion_traducida=False, traduccion_error=error)
+
+
 ticker, bolsa = selector_ticker("rsg")
 
 if st.button("Generar informe de riesgo", type="primary"):
@@ -41,6 +83,7 @@ if st.button("Generar informe de riesgo", type="primary"):
             simbolo = ticker_yahoo(ticker, bolsa)
             with st.spinner("Descargando cuentas y cotizaciones, y calculando…"):
                 D = dict(riesgo_cacheado(simbolo))
+                traducir_descripcion(D)
             try:
                 D["historial"] = guardar_y_leer(D)
             except Exception as e:
