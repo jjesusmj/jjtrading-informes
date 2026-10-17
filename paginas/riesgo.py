@@ -11,8 +11,8 @@ from riesgo_datos import ErrorRiesgo, descargar
 from riesgo_html import generar_html
 from traducciones import traducir_texto
 
-st.markdown("## JJTrading \\_ Riesgo")
-st.caption("Nota de 0 a 100 con datos de Yahoo Finance. Todos los ratios se calculan en la app. No incluye entradas, stops ni recomendaciones.")
+st.markdown("## JJTrading \\_ Análisis acción")
+st.caption("Nota de 0 a 100, valor justo, cuentas y evolución, con datos de Yahoo Finance. Todos los ratios se calculan en la app. No incluye entradas, stops ni recomendaciones.")
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -73,9 +73,13 @@ def traducir_descripcion(D):
         D.update(descripcion=en, descripcion_traducida=False, traduccion_error=error)
 
 
+pendiente = st.session_state.pop("rsg_pendiente", None)          # viene de Seguimiento: (ticker, bolsa)
+if pendiente:
+    st.session_state["rsg_ticker"], st.session_state["rsg_bolsa"] = pendiente
+
 ticker, bolsa = selector_ticker("rsg")
 
-if st.button("Generar informe de riesgo", type="primary"):
+if st.button("Generar análisis", type="primary") or pendiente:
     if not ticker:
         st.warning("Escribe un ticker.")
     else:

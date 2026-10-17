@@ -365,51 +365,81 @@ def generar(ticker, bolsa="EEUU"):
     color_estado = {"En zona": "var(--acc)", "Cerca": "var(--warn)", "Esperar retroceso": "var(--muted)", "Invalidado": "var(--neg)"}[estado[0]]
     color_tend = {"Alcista": "var(--acc)", "Mixta": "var(--warn)", "Bajista": "var(--neg)"}[tendencia[0]]
 
+    from riesgo_html import CSS as CSS_R, JS as JS_R, ayuda
+    E_ = html.escape
+    EXTRA = """
+.jr{--acc:#15803d;--warn:#b45309;--neg:#dc2626;--muted:#5b6474}
+.jr .prow{position:relative;display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:11px 14px;margin-bottom:8px;background:#fff}
+.jr .prow .lb{display:flex;align-items:center;font-size:13px;color:var(--mut)}.jr .prow > b{font-family:'JetBrains Mono',monospace;font-size:20px}
+.jr .prow.stop{border-color:#f5c2c2;background:#fef2f2}.jr .prow.stop > b{color:var(--neg)}.jr .prow.o2 > b{color:var(--acc)}
+.jr .pos{color:var(--acc)}.jr .neg{color:var(--neg)}.jr .peq{color:var(--mut);font-size:12.5px}
+.jr .tagc{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12.5px;font-weight:700;border:1.5px solid currentColor}
+.jr ul{margin:6px 0 0;padding-left:18px}.jr li{margin:4px 0}.jr .marca{font-size:12px;letter-spacing:1px;color:#cbd5e1;margin-bottom:6px}
+"""
+    AY = {
+        "precio": ayuda("El último cierre diario que da Yahoo.", None, None),
+        "atr": ayuda("Cuánto se mueve el precio en un día normal, de máximo a mínimo.",
+                     "Media de Wilder del rango verdadero de las últimas 14 sesiones (ATR 14).",
+                     "Sirve de regla: la zona, el stop y las distancias del plan se miden en ATR."),
+        "rango": ayuda("El mínimo y el máximo de las últimas 252 sesiones, dentro de la sesión.", "Distancia = precio / máximo − 1.", None),
+        "estado": ayuda("En qué punto está el precio respecto al plan.", None,
+                        "En zona: dentro de la zona de entrada · Cerca: a menos de 2 ATR por encima · Esperar retroceso: a más de 2 ATR · Invalidado: por debajo del stop."),
+        "zona": ayuda("El rango de precios donde el plan propone comprar.",
+                      "Va desde el soporte hasta 0,25 ATR por encima. Soporte: el Order Block alcista más alto con su techo a 3 ATR o menos bajo el precio; "
+                      "si no hay, el más alto entre EMA 55, EMA 200, POC y línea SuperTrend que esté por debajo del precio.", None),
+        "stop": ayuda("El precio en el que se cierra la operación para limitar la pérdida.",
+                      "1 ATR bajo el suelo del Order Block, o 1,5 ATR bajo otro soporte. Si hay un mínimo swing entre la entrada y el stop, se baja a 1 ATR bajo ese mínimo. "
+                      "Nunca a menos de un 2 % de la entrada.", "Más alejado no es peor: los stops de menos del 2 % dieron peores resultados en la calibración."),
+        "obj1": ayuda("Primer precio donde tomar beneficios.", "Entrada + 2 veces el riesgo por acción (2R). Si hay una resistencia por encima de ese precio, se usa la primera.", None),
+        "obj2": ayuda("Segundo precio donde tomar beneficios.", "Entrada + 3 veces el riesgo por acción (3R), o la primera resistencia por encima. Siempre por encima del objetivo 1.", None),
+        "riesgo": ayuda("Lo que pierdes por acción si salta el stop.", "(Entrada − stop) / entrada.", "Por encima del 8 % se avisa: riesgo por operación alto."),
+        "ratio": ayuda("Cuánto puedes ganar por cada unidad que arriesgas, hasta el objetivo 1.", "(Objetivo 1 − entrada) / (entrada − stop).", "Cuanto más alto, mejor; 2 o más es lo habitual con estas reglas."),
+        "niveles": ayuda("Precios donde la cotización puede frenarse al subir (resistencia) o al bajar (soporte).",
+                         "Order Blocks (zonas de órdenes institucionales), EMA 55 y 200, POC (precio con más volumen en 200 velas), línea SuperTrend, "
+                         "mínimos y máximos swing (10 velas a cada lado) y máximo de 52 semanas. ATR = distancia al precio medida en ATR.", None),
+        "tendencia": ayuda("Hacia dónde va el precio en gráfico diario.", "Alcista: precio sobre la EMA 200 y SuperTrend diario alcista. Bajista: lo contrario. Mixta: señales opuestas.",
+                           "Comprar con tendencia bajista es ir contra la corriente: se avisa."),
+        "conf": ayuda("Señales en velas de 1 hora que pueden confirmar el giro.", "SuperTrend 1H, cambio de carácter alcista (CHoCH) y cruce del MACD sobre su señal.",
+                      "Informativa: no cambia el plan."),
+    }
+    tc = lambda t: {"var(--acc)": "verde", "var(--warn)": "ambar", "var(--neg)": "rojo"}.get(t, "gris")
+    chips = "".join(f'<span class="chip">{E_(x)}</span>' for x in ([sector] if sector else []) + [bolsa, moneda, f"{hoy:%d/%m/%Y}"] if x)
     INFORME = f'''<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>JJTrading_ {TICKER} plan</title><style>
-    :root{{--bg:#f3f0ea;--card:#fffdf9;--line:#e3ddd2;--txt:#0f172a;--muted:#5b6474;--acc:#15803d;--warn:#b45309;--neg:#dc2626}}
-    *{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}}
-    .wrap{{max-width:1100px;margin:0 auto;padding:24px 16px}}.top{{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:14px;flex-wrap:wrap;gap:8px}}
-    .brand{{font-weight:800;font-size:26px;letter-spacing:-.5px}}.brand span{{color:var(--acc)}}.sub{{color:var(--muted);font-size:11px;letter-spacing:2px;text-transform:uppercase}}
-    .kick{{color:var(--acc);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:22px 0 4px}}h1{{font-size:44px;margin:0;line-height:1.05;color:#0f172a}}h3{{color:var(--txt)}}h1 small{{color:var(--acc);font-size:20px;margin-left:8px}}
-    .kpis{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:14px;margin:20px 0;overflow:hidden}}.kpi{{padding:14px 18px;border-right:1px solid var(--line)}}.kpi:last-child{{border:0}}
-    .lab{{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:uppercase}}.big{{font-size:28px;font-weight:700}}.small{{color:var(--muted);font-size:12px}}
-    .grid{{display:grid;grid-template-columns:1.6fr 1fr;gap:16px}}.card{{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}}
-    .card h3{{margin:0 0 12px;font-size:17px}}.row{{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px}}
-    .row b{{font-size:22px}}.row.stop{{border-color:#f5c2c2;background:#fee2e2}}.row.stop b{{color:var(--neg)}}.row.o2 b{{color:var(--acc)}}
-    .pos{{color:var(--acc)}}.neg{{color:var(--neg)}}table{{width:100%;border-collapse:collapse;font-size:13px}}td,th{{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}}th{{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:1px}}.num{{text-align:right;font-variant-numeric:tabular-nums}}
-    .tag{{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid currentColor}}ul{{margin:6px 0 0;padding-left:18px}}li{{margin:4px 0}}
-    .foot{{color:var(--muted);font-size:12px;margin-top:18px;line-height:1.6}}@media(max-width:820px){{.grid{{grid-template-columns:1fr}}.kpis{{grid-template-columns:1fr 1fr}}.kpi{{border-bottom:1px solid var(--line)}}h1{{font-size:32px}}}}
-    </style></head><body><div class="wrap">
-    <div class="top"><div><span class="brand">JJTrading<span>_</span></span> &nbsp;<span class="sub">Plan de operación · solo largos</span></div>
-    <div class="sub" style="text-align:right">{hoy:%d/%m/%Y} · {html.escape(bolsa)}<br><span style="color:var(--acc)">Datos: Yahoo Finance</span></div></div>
-    <div class="kick">{html.escape(sector) or "&nbsp;"}</div><h1>{html.escape(nombre)}<small>{TICKER}</small></h1>
-    <div class="kpis"><div class="kpi"><div class="lab">Último precio</div><div class="big">{f2(P)} <span style="font-size:15px">{html.escape(moneda)}</span></div><div class="small">cierre/último dato {hoy:%d/%m/%Y}</div></div>
-    <div class="kpi"><div class="lab">Variación diaria</div><div class="big {'pos' if P>=P_ant else 'neg'}">{pct((P/P_ant-1)*100)}</div><div class="small">anterior {f2(P_ant)}</div></div>
-    <div class="kpi"><div class="lab">Capitalización</div><div class="big">{mcap_txt}</div><div class="small">ATR(14) diario {f2(atr)} · {d1(atr/P*100)} %</div></div>
-    <div class="kpi"><div class="lab">Rango 52 semanas</div><div class="big">{f2(min52)}–{f2(max52)}</div><div class="small">a {d1((P/max52-1)*100)} % del máximo</div></div></div>
-    <div class="grid"><div class="card"><h3>Precio (120 sesiones) y plan</h3>{svg}
-    <div class="small">Banda verde: zona de entrada. Líneas: objetivos, entrada de referencia y stop.</div></div>
-    <div class="card"><h3>Plan de operación</h3>
-    <div class="row"><span class="lab">Estado</span><span class="tag" style="color:{color_estado}">{estado[0]}</span></div>
-    <div class="row"><span class="lab">Zona de entrada</span><b>{f2(zona_baja)}–{f2(zona_alta)} {html.escape(simbolo)}</b></div>
-    <div class="row stop"><span class="lab">Stop de pérdidas</span><b>{f2(stop)} {html.escape(simbolo)}</b></div>
-    <div class="row"><span class="lab">Objetivo 1 · {origen1}</span><b>{f2(obj1)} {html.escape(simbolo)}</b></div>
-    <div class="row o2"><span class="lab">Objetivo 2 · {origen2}</span><b>{f2(obj2)} {html.escape(simbolo)}</b></div>
-    <div class="row"><div><div class="lab">Riesgo potencial</div><b class="neg">−{d1(riesgo_pct)} %</b><div class="small">−{f2(R)} {html.escape(simbolo)}/acción</div></div>
-    <div style="text-align:right"><div class="lab">Ratio B°/riesgo</div><b class="pos">{f2(ratio)}×</b><div class="small">objetivo 1: {pct((obj1/entrada-1)*100)}</div></div></div>
-    <div class="small">{html.escape(estado[1])}. Entrada de referencia {f2(entrada)}. Soporte: {html.escape(soporte_nombre)}. Stop: {html.escape(regla_stop)}. Plazo máximo {PLAZO_SES} sesiones.</div></div></div>
-    <div class="grid" style="margin-top:16px"><div class="card"><h3>Mapa de niveles (diario)</h3><table><tr><th>Nivel</th><th>Tipo</th><th class="num">Precio</th><th class="num">vs precio</th><th class="num">ATR</th></tr>{filas_niv}</table></div>
-    <div class="card"><h3>Contexto</h3><div class="row"><span class="lab">Tendencia diaria</span><span class="tag" style="color:{color_tend}">{tendencia[0]}</span></div>
-    <div class="small">{html.escape(tendencia[1])}. EMA 21 {f2(e21)} · EMA 55 {f2(e55)} · EMA 200 {f2(e200)}.</div>
-    <h3 style="margin-top:16px">Confirmación 1H <span class="small">(informativa)</span></h3><table>{filas_conf}</table>
-    <h3 style="margin-top:16px">Avisos</h3><ul>{html_avisos}</ul>
-    <div class="small" style="margin-top:8px">Próximos resultados: {f"{proximos:%d/%m/%Y}" if proximos is not None else "sin fecha en Yahoo"}</div></div></div>
-    <div class="foot"><b>Método.</b> Niveles calculados con tus indicadores (Order Blocks LuxAlgo, EMAs, SuperTrend 10/3, POC 200 velas, mínimos/máximos swing de 10 velas) y reglas calibradas con 162 acciones en diario 2006-2026:
+    <title>JJTrading _ {TICKER} plan</title><style>html,body{{margin:0;padding:0;background:#f3f0ea}}{CSS_R}{EXTRA}</style></head><body><div class="jr">
+    <div class="nav"><div><div class="k">En esta ficha · 1/5</div><div class="n">Resumen</div></div><details><summary>Secciones ▾</summary><div class="lista">
+    <a href="#pl-resumen">Resumen</a><a href="#pl-plan">Plan de operación</a><a href="#pl-grafico">Gráfico</a><a href="#pl-niveles">Niveles y contexto</a><a href="#pl-metodo">Método</a></div></details></div>
+    <section class="sec" id="pl-resumen" data-t="Resumen" style="padding:0;border:0;background:transparent">
+    <div class="hero" style="display:block"><div class="marca">JJTRADING _ PLAN DE OPERACIÓN · SOLO LARGOS</div>
+    <div class="t">{E_(nombre)} <span class="chip m" style="font-size:13px">{TICKER}</span></div><div>{chips}</div></div>
+    <div class="precio" style="display:block"><div class="g2">
+    <div class="tile"><div class="l" style="display:flex;justify-content:space-between;align-items:center">Último precio{AY["precio"]}</div><div class="v m">{f2(P)} <span style="font-size:14px;color:var(--mut)">{E_(moneda)}</span></div><div class="l">cierre del {hoy:%d/%m/%Y}</div></div>
+    <div class="tile"><div class="l">Variación diaria</div><div class="v m {'pos' if P >= P_ant else 'neg'}">{pct((P / P_ant - 1) * 100)}</div><div class="l">anterior {f2(P_ant)}</div></div>
+    <div class="tile"><div class="l" style="display:flex;justify-content:space-between;align-items:center">Capitalización · ATR{AY["atr"]}</div><div class="v m">{mcap_txt}</div><div class="l">ATR 14 diario {f2(atr)} · {d1(atr / P * 100)} %</div></div>
+    <div class="tile"><div class="l" style="display:flex;justify-content:space-between;align-items:center">Rango 52 semanas{AY["rango"]}</div><div class="v m" style="font-size:19px">{f2(min52)} – {f2(max52)}</div><div class="l">a {d1((P / max52 - 1) * 100)} % del máximo</div></div>
+    </div></div></section>
+    <section class="sec" id="pl-plan" data-t="Plan de operación"><h2>Plan de operación</h2><p class="sub">Solo largos · plazo máximo {PLAZO_SES} sesiones</p>
+    <div class="prow"><span class="lb">Estado{AY["estado"]}</span><span class="tagc" style="color:{color_estado}">{estado[0]}</span></div>
+    <div class="prow"><span class="lb">Zona de entrada{AY["zona"]}</span><b>{f2(zona_baja)}–{f2(zona_alta)}{E_(simbolo)}</b></div>
+    <div class="prow stop"><span class="lb">Stop de pérdidas{AY["stop"]}</span><b>{f2(stop)}{E_(simbolo)}</b></div>
+    <div class="prow"><span class="lb">Objetivo 1 · {origen1}{AY["obj1"]}</span><b>{f2(obj1)}{E_(simbolo)}</b></div>
+    <div class="prow o2"><span class="lb">Objetivo 2 · {origen2}{AY["obj2"]}</span><b>{f2(obj2)}{E_(simbolo)}</b></div>
+    <div class="grid">
+    <div class="prow" style="display:block"><span class="lb">Riesgo potencial{AY["riesgo"]}</span><b class="neg">−{d1(riesgo_pct)} %</b><div class="peq">−{f2(R)}{E_(simbolo)} por acción</div></div>
+    <div class="prow" style="display:block"><span class="lb">Ratio beneficio/riesgo{AY["ratio"]}</span><b class="pos">{f2(ratio)}×</b><div class="peq">hasta el objetivo 1: {pct((obj1 / entrada - 1) * 100)}</div></div></div>
+    <p class="peq" style="margin:6px 0 0">{E_(estado[1])}. Entrada de referencia {f2(entrada)}. Soporte: {E_(soporte_nombre)}. Stop: {E_(regla_stop)}.</p></section>
+    <section class="sec" id="pl-grafico" data-t="Gráfico"><h2>Precio (120 sesiones) y plan</h2><p class="sub">Banda verde: zona de entrada · líneas: objetivos, entrada de referencia y stop</p>{svg}</section>
+    <section class="sec" id="pl-niveles" data-t="Niveles y contexto"><div class="grid">
+    <div><h3 style="display:flex;align-items:center;position:relative">Mapa de niveles (diario){AY["niveles"]}</h3><div class="tw"><table><tr><th>Nivel</th><th>Tipo</th><th class="n">Precio</th><th class="n">vs precio</th><th class="n">ATR</th></tr>{filas_niv}</table></div></div>
+    <div><div class="prow"><span class="lb">Tendencia diaria{AY["tendencia"]}</span><span class="tagc" style="color:{color_tend}">{tendencia[0]}</span></div>
+    <p class="peq">{E_(tendencia[1])}. EMA 21 {f2(e21)} · EMA 55 {f2(e55)} · EMA 200 {f2(e200)}.</p>
+    <h3 style="margin-top:14px;display:flex;align-items:center;position:relative">Confirmación 1H{AY["conf"]}</h3><div class="tw"><table>{filas_conf}</table></div>
+    <h3 style="margin-top:14px">Avisos</h3><ul>{html_avisos}</ul>
+    <p class="peq" style="margin-top:8px">Próximos resultados: {f"{proximos:%d/%m/%Y}" if proximos is not None else "sin fecha en Yahoo"}</p></div></div></section>
+    <section class="sec" id="pl-metodo" data-t="Método"><h2>Método</h2><p class="peq" style="font-size:13.5px;line-height:1.6">Niveles calculados con tus indicadores (Order Blocks LuxAlgo, EMAs, SuperTrend 10/3, POC 200 velas, mínimos/máximos swing de 10 velas) y reglas calibradas con 162 acciones en diario 2006-2026:
     stop corto (&lt; 2 %) y stop justo bajo un mínimo swing dieron peores resultados; el Order Block mostró una ventaja pequeña frente a niveles al azar con stops ≥ 2 %; el resto de soportes rindió como un nivel al azar.
     Los niveles definen dónde se invalida la idea y cuánto arriesgas; no predicen el rebote. La simulación supone salida al precio del stop: con gaps la pérdida puede ser mayor.
-    <br>Informe automático con fines de análisis personal. No es una recomendación de inversión.</div>
-    </div></body></html>'''
+    <br>Datos: Yahoo Finance. Informe automático con fines de análisis personal. No es una recomendación de inversión.</p></section>
+    </div>{JS_R}</body></html>'''
 
     # ---------------- Fila completa para Google Sheets (Datos / Histórico) ----------------
     # Mismas variables que el informe: no se recalcula nada.

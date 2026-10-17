@@ -51,6 +51,6 @@ def mostrar_informe(r):
     st.download_button("Descargar informe (HTML)", r["html"], file_name=f"informe_{r['ticker']}_{r['fecha']}.html",
                        mime="text/html", key=f"dl_{r['ticker']}")
     if hasattr(st, "iframe"):
-        st.iframe(r["html"], height=1900)
+        st.iframe(r["html"], height="content")
     else:
         components.html(r["html"], height=1900, scrolling=True)

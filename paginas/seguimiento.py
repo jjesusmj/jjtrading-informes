@@ -159,7 +159,7 @@ n2 = lambda t: st.column_config.NumberColumn(t, format="%.2f")
 ev = st.dataframe(
     tabla, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="tabla",
     column_config={"★": st.column_config.TextColumn("★", width="small"),
-                   "Nota": st.column_config.NumberColumn("Nota", format="%d", help="Última nota de riesgo (0-100) generada en la pestaña Riesgo. Más es mejor."),
+                   "Nota": st.column_config.NumberColumn("Nota", format="%d", help="Última nota (0-100) generada en la pestaña Análisis acción. Más es mejor."),
                    **{c: n2(c) for c in ["Último precio", "Var. día %", "Dist. zona %", "Stop", "Obj. 1", "Obj. 2",
                                          "Riesgo %", "Ratio B/R"]}})
 st.caption("Pulsa una fila para ver su informe, actualizarla, marcarla como favorita o quitarla. "
@@ -199,7 +199,10 @@ if sel:
     fila_seg = seg[seg["Ticker"] == t].iloc[0]
     b = fila_seg["Bolsa"] if fila_seg["Bolsa"] in BOLSAS else "EEUU"
     st.markdown(f"### {t} · {fila_seg['Nombre']}")
-    a1, a2, a3, a4 = st.columns(4)
+    a1, a2, a5, a3, a4 = st.columns(5)
+    if a5.button("🔍 Análisis acción", width="stretch"):
+        st.session_state["rsg_pendiente"] = (t, b)
+        st.switch_page("paginas/riesgo.py")
     if a1.button("🔄 Actualizar", width="stretch"):
         actualizar([(t, b)])
         st.rerun()
