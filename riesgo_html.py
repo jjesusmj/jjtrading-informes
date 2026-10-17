@@ -558,7 +558,7 @@ def sec_valor(D):
             o.append(_tile(nom, es(x["valor"], 2), AY[k], _pill("verde" if x["dist"] >= 0 else "rojo", ("▲ " if x["dist"] >= 0 else "▼ ") + es(x["dist"], 0, pct=True, signo=True) + " vs precio") + rng))
     o.append(f'<div class="tile osc"><div class="l">Precio</div><div class="v m">{es(P, 2)}</div><div class="l">último cierre</div></div></div>')
     gy = V.get("g_yahoo")
-    o.append(f'<p class="nota-pie">Crecimiento usado: {gtxt}' + (f' (los analistas esperan {es(gy * 100)} % para el ejercicio en curso; se limita entre 0 % y 10 %)' if gy is not None else "")
+    o.append(f'<p class="nota-pie">Crecimiento usado: {gtxt}' + (f' (los analistas esperan {es(gy * 100)} % para el ejercicio fiscal siguiente; se limita entre 0 % y 10 %)' if gy is not None else "")
              + '. Descuento 9 %, crecimiento perpetuo 2,5 %. Son orientativos: cambian mucho con los supuestos y no son una recomendación.</p></section>')
     return "".join(o)
 

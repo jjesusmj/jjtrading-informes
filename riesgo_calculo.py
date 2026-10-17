@@ -725,9 +725,7 @@ def _dcf(f0, g, r):
 
 
 def valor_justo(R, C, P, fcf, acciones, ni, cons):
-    g0 = _f(cons.get("crec_0y"))
-    if g0 is None:
-        g0 = _f(cons.get("crec_1y"))
+    g0 = _f(cons.get("crec_1y"))
     g = None if g0 is None else min(max(g0, 0.0), TOPE_G)
     eps_t = C.T.get("DilutedEPS_aj") or C.A.get("DilutedEPS_aj") or []
     eps = eps_t[-1][1] if eps_t else None
