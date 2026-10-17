@@ -4,7 +4,7 @@ import hoja
 from comun import informe_cacheado, mostrar_informe, selector_ticker
 from niveles import ErrorInforme
 
-st.markdown("## JJTrading_ · Plan de operación")
+st.markdown("## JJTrading \\_ Plan de operación")
 st.caption("Solo largos. Niveles de entrada, stop y objetivos calculados con datos de Yahoo Finance.")
 
 ticker, bolsa = selector_ticker("inf")

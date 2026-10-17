@@ -317,7 +317,7 @@ def svg_spark(serie, base):
     c = [v for _, v in serie]
     if len(c) < 2:
         return ""
-    W, H, pl, pr, pt, pb = 680, 200, 6, 96, 30, 26
+    W, H, pl, pr, pt, pb = 680, 200, 6, 92, 30, 26
     vals = c + ([base] if base else [])
     lo, hi = min(vals), max(vals)
     X = lambda i: pl + i / (len(c) - 1) * (W - pl - pr)
@@ -325,30 +325,33 @@ def svg_spark(serie, base):
     pts = " ".join(f"{X(i):.1f},{Y(v):.1f}" for i, v in enumerate(c))
     last = len(c) - 1
     im, imn = c.index(max(c)), c.index(min(c))
+    T = 'font-family="JetBrains Mono,ui-monospace,monospace" font-size="17"'
     o = [f'<svg viewBox="0 0 {W} {H}" style="width:100%;height:auto" role="img" aria-label="Precio de 12 meses frente al precio de hace un año">']
     if base:
         yb = Y(base)
         area = f"{X(0):.1f},{yb:.1f} {pts} {X(last):.1f},{yb:.1f}"
+        yt = yb + 6
+        if abs(Y(c[last]) - yb) < 22:
+            yt = yb - 8 if Y(c[last]) > yb else yb + 20
         o.append(f'<defs><clipPath id="sp-arr"><rect x="0" y="0" width="{W}" height="{yb:.1f}"/></clipPath>'
                  f'<clipPath id="sp-abj"><rect x="0" y="{yb:.1f}" width="{W}" height="{H - yb:.1f}"/></clipPath></defs>'
                  f'<polygon points="{area}" fill="#e3f1e6" clip-path="url(#sp-arr)"/><polygon points="{area}" fill="#fbe4e4" clip-path="url(#sp-abj)"/>'
-                 f'<polyline points="{pts}" fill="none" stroke="#15803d" stroke-width="2.4" clip-path="url(#sp-arr)"/>'
-                 f'<polyline points="{pts}" fill="none" stroke="#dc2626" stroke-width="2.4" clip-path="url(#sp-abj)"/>'
-                 f'<line x1="{pl}" x2="{W - pr}" y1="{yb:.1f}" y2="{yb:.1f}" stroke="#8a92a0" stroke-dasharray="7 5" stroke-width="1.5"/>'
-                 f'<text x="{W - pr + 8}" y="{yb + 6:.1f}" font-size="19" fill="#5b6474">{es(base, 2)}</text>')
+                 f'<polyline points="{pts}" fill="none" stroke="#15803d" stroke-width="2.2" clip-path="url(#sp-arr)"/>'
+                 f'<polyline points="{pts}" fill="none" stroke="#dc2626" stroke-width="2.2" clip-path="url(#sp-abj)"/>'
+                 f'<line x1="{pl}" x2="{W - pr}" y1="{yb:.1f}" y2="{yb:.1f}" stroke="#8a92a0" stroke-dasharray="7 5" stroke-width="1.4"/>'
+                 f'<text x="{W - pr + 8}" y="{yt:.1f}" {T} fill="#5b6474">{es(base, 2)}</text>')
     else:
-        o.append(f'<polyline points="{pts}" fill="none" stroke="#0f172a" stroke-width="2.4"/>')
+        o.append(f'<polyline points="{pts}" fill="none" stroke="#0f172a" stroke-width="2.2"/>')
     col_hoy = "#15803d" if not base or c[-1] >= base else "#dc2626"
     xm = min(max(X(im), 70), W - pr - 70)
-    o.append(f'<circle cx="{X(im):.1f}" cy="{Y(c[im]):.1f}" r="5" fill="#15803d"/>'
-             f'<text x="{xm:.1f}" y="{Y(c[im]) - 10:.1f}" font-size="19" fill="#15803d" text-anchor="middle">Máx. {es(c[im], 2)}</text>')
+    o.append(f'<circle cx="{X(im):.1f}" cy="{Y(c[im]):.1f}" r="4.5" fill="#15803d"/>'
+             f'<text x="{xm:.1f}" y="{Y(c[im]) - 10:.1f}" {T} fill="#15803d" text-anchor="middle">{es(c[im], 2)}</text>')
     if imn != last:
         cerca = X(imn) > W - pr - 140
         xn = X(imn) - 10 if cerca else min(max(X(imn), 70), W - pr - 70)
-        o.append(f'<circle cx="{X(imn):.1f}" cy="{Y(c[imn]):.1f}" r="5" fill="#dc2626"/>'
-                 f'<text x="{xn:.1f}" y="{Y(c[imn]) + (6 if cerca else 26):.1f}" font-size="19" fill="#dc2626" text-anchor="{"end" if cerca else "middle"}">Mín. {es(c[imn], 2)}</text>')
-    o.append(f'<circle cx="{X(last):.1f}" cy="{Y(c[last]):.1f}" r="6" fill="{col_hoy}"/>'
-             f'<text x="{X(last) + 10:.1f}" y="{Y(c[last]) + (6 if imn != last else 6):.1f}" font-size="19" font-weight="700" fill="{col_hoy}">Hoy</text></svg>')
+        o.append(f'<circle cx="{X(imn):.1f}" cy="{Y(c[imn]):.1f}" r="4.5" fill="#dc2626"/>'
+                 f'<text x="{xn:.1f}" y="{Y(c[imn]) + (6 if cerca else 24):.1f}" {T} fill="#dc2626" text-anchor="{"end" if cerca else "middle"}">{es(c[imn], 2)}</text>')
+    o.append(f'<circle cx="{X(last):.1f}" cy="{Y(c[last]):.1f}" r="5.5" fill="{col_hoy}"/></svg>')
     return "".join(o)
 
 
@@ -441,8 +444,8 @@ def sec_resumen(D):
          f'Cuentas hasta el {_fmt_fecha(D["fecha_cuentas"])}</div>'
          f'<div class="m" style="display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:12px"><span>Mín. 52 sem. {es(T["min52"], 2)}</span><span>Máx. {es(T["max52"], 2)}</span></div>'
          f'<div class="bar52"><i style="left:calc({pos52:.1f}% - 1px)"></i></div></div>'
-         f'<div>{svg_spark(D["serie"], r1.get("base"))}<div class="leg" style="text-align:right">12 meses · <b style="color:var(--v)">verde</b>: por encima del precio de hace un año · '
-         f'<b style="color:var(--r)">rojo</b>: por debajo</div></div></div>']
+         f'<div>{svg_spark(D["serie"], r1.get("base"))}<div class="leg" style="text-align:right;margin-top:2px"><span style="background:#15803d"></span>Sube <span style="background:#dc2626"></span>Baja '
+         f'<span style="background:none;border-top:2px dashed #8a92a0;height:0"></span>Hace un año · 12 meses</div></div></div>']
     for a in D["avisos"]:
         o.append(f'<div class="aviso">⚠ {E(a)}</div>')
     if D.get("descripcion"):

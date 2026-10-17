@@ -11,7 +11,7 @@ from riesgo_datos import ErrorRiesgo, descargar
 from riesgo_html import generar_html
 from traducciones import traducir_texto
 
-st.markdown("## JJTrading_ · Riesgo")
+st.markdown("## JJTrading \\_ Riesgo")
 st.caption("Nota de 0 a 100 con datos de Yahoo Finance. Todos los ratios se calculan en la app. No incluye entradas, stops ni recomendaciones.")
 
 
