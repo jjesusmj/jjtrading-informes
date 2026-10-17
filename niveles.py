@@ -367,16 +367,16 @@ def generar(ticker, bolsa="EEUU"):
 
     INFORME = f'''<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>JJTrading_ {TICKER} plan</title><style>
-    :root{{--bg:#07130d;--card:#0d1f16;--line:#1f3a2b;--txt:#eef5f0;--muted:#8fa89a;--acc:#5fd17a;--warn:#e8c25a;--neg:#ef7a6a}}
+    :root{{--bg:#f3f0ea;--card:#fffdf9;--line:#e3ddd2;--txt:#0f172a;--muted:#5b6474;--acc:#15803d;--warn:#b45309;--neg:#dc2626}}
     *{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}}
     .wrap{{max-width:1100px;margin:0 auto;padding:24px 16px}}.top{{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:14px;flex-wrap:wrap;gap:8px}}
     .brand{{font-weight:800;font-size:26px;letter-spacing:-.5px}}.brand span{{color:var(--acc)}}.sub{{color:var(--muted);font-size:11px;letter-spacing:2px;text-transform:uppercase}}
-    .kick{{color:var(--acc);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:22px 0 4px}}h1{{font-size:44px;margin:0;line-height:1.05;color:#ffffff}}h3{{color:var(--txt)}}h1 small{{color:var(--acc);font-size:20px;margin-left:8px}}
+    .kick{{color:var(--acc);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin:22px 0 4px}}h1{{font-size:44px;margin:0;line-height:1.05;color:#0f172a}}h3{{color:var(--txt)}}h1 small{{color:var(--acc);font-size:20px;margin-left:8px}}
     .kpis{{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:14px;margin:20px 0;overflow:hidden}}.kpi{{padding:14px 18px;border-right:1px solid var(--line)}}.kpi:last-child{{border:0}}
     .lab{{color:var(--muted);font-size:11px;letter-spacing:1.5px;text-transform:uppercase}}.big{{font-size:28px;font-weight:700}}.small{{color:var(--muted);font-size:12px}}
     .grid{{display:grid;grid-template-columns:1.6fr 1fr;gap:16px}}.card{{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}}
     .card h3{{margin:0 0 12px;font-size:17px}}.row{{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px}}
-    .row b{{font-size:22px}}.row.stop{{border-color:#5a2a24;background:#24120f}}.row.stop b{{color:var(--neg)}}.row.o2 b{{color:var(--acc)}}
+    .row b{{font-size:22px}}.row.stop{{border-color:#f5c2c2;background:#fee2e2}}.row.stop b{{color:var(--neg)}}.row.o2 b{{color:var(--acc)}}
     .pos{{color:var(--acc)}}.neg{{color:var(--neg)}}table{{width:100%;border-collapse:collapse;font-size:13px}}td,th{{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}}th{{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:1px}}.num{{text-align:right;font-variant-numeric:tabular-nums}}
     .tag{{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid currentColor}}ul{{margin:6px 0 0;padding-left:18px}}li{{margin:4px 0}}
     .foot{{color:var(--muted);font-size:12px;margin-top:18px;line-height:1.6}}@media(max-width:820px){{.grid{{grid-template-columns:1fr}}.kpis{{grid-template-columns:1fr 1fr}}.kpi{{border-bottom:1px solid var(--line)}}h1{{font-size:32px}}}}

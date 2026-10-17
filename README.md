@@ -60,6 +60,13 @@ Lee la pestaña «Histórico» de la hoja y, para cada informe, descarga de Yaho
 El botón «Guardar resultados en la hoja» escribe la pestaña «Resultados» (se crea sola).
 Los informes nuevos guardan también la columna «Resistencias»; se añade sola a la cabecera.
 
+## Pestaña Riesgo
+
+Escribe ticker y bolsa y pulsa «Generar informe de riesgo». Todo sale de Yahoo Finance y todos los ratios se calculan en la app
+(FCF = flujo operativo − capex, deuda neta, ROIC, EV/EBITDA…). Si un dato no cuadra se descarta y la tarjeta sale en gris.
+El PEG sale siempre como «Sin dato» porque Yahoo no publica el crecimiento estimado a 5 años.
+El valor justo (Graham, DCF, dividendos) usa supuestos fijos y no puntúa.
+
 ## Si falla
 
 - *"Yahoo no devuelve datos suficientes"*: revisa el ticker y la bolsa.

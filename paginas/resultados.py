@@ -15,8 +15,8 @@ if not hoja.configurada():
 
 ICONO = {"Entrada": "📥", "T1": "🎯", "T2": "🟢", "Stop": "🔴", "Activado": "🟡", "T1 alcanzado": "🟡", "Pendiente": "⚪", "Plazo": "🟠",
          "Caducado": "⚫", "Invalidado": "⛔", "Sin datos": "❔", "Datos inválidos": "❔"}
-COLOR = {"verde": "#5fd17a", "rojo": "#ff6b6b", "ambar": "#f2c14e", "gris": "#8aa397", "zona": "rgba(95,209,122,0.15)",
-         "fondo": "#07130d", "panel": "#0d1f16", "texto": "#eef5f0"}
+COLOR = {"verde": "#15803d", "rojo": "#dc2626", "ambar": "#b45309", "gris": "#64748b", "zona": "rgba(21,128,61,0.12)",
+         "fondo": "#f3f0ea", "panel": "#fffdf9", "texto": "#0f172a"}
 MADRID = "Europe/Madrid"
 
 
@@ -248,11 +248,11 @@ def grafico(velas, inf, r, diario, corte):
     for k, (_, txt, col) in enumerate(arriba):
         fig.add_annotation(xref="paper", yref="paper", x=0.995, y=0.99 - k * 0.055, xanchor="right", yanchor="top",
                            text=f"↑ {txt}", showarrow=False, font=dict(color=col, size=12),
-                           bgcolor="rgba(7,19,13,0.75)")
+                           bgcolor="rgba(255,253,249,0.85)")
     for k, (_, txt, col) in enumerate(abajo):
         fig.add_annotation(xref="paper", yref="paper", x=0.995, y=0.01 + k * 0.055, xanchor="right", yanchor="bottom",
                            text=f"↓ {txt}", showarrow=False, font=dict(color=col, size=12),
-                           bgcolor="rgba(7,19,13,0.75)")
+                           bgcolor="rgba(255,253,249,0.85)")
 
     # Marcadores: salen del estado calculado (iguales en todas las temporalidades)
     simbolos = {"Entrada": ("triangle-up", COLOR["ambar"]), "T1": ("circle", COLOR["verde"]),
@@ -283,7 +283,7 @@ def grafico(velas, inf, r, diario, corte):
                       plot_bgcolor=COLOR["panel"], font_color=COLOR["texto"], xaxis_rangeslider_visible=False,
                       dragmode="pan", hovermode="x unified")
     fig.update_xaxes(type="category", nticks=8, showgrid=False)
-    fig.update_yaxes(gridcolor="rgba(255,255,255,0.06)", range=[y0, y1])
+    fig.update_yaxes(gridcolor="rgba(15,23,42,0.07)", range=[y0, y1])
     st.plotly_chart(fig, width="stretch", config={"displaylogo": False, "scrollZoom": True})
 
 
