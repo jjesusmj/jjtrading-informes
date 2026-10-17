@@ -125,6 +125,10 @@ if base.empty:
     st.stop()
 
 d = base[["Ticker", "Bolsa", "Favorita"]].merge(datos, on="Ticker", how="left", suffixes=("_seg", ""))
+try:
+    notas_riesgo = hoja.ultima_nota_riesgo()
+except Exception:
+    notas_riesgo = {}
 num = lambda c: pd.to_numeric(d.get(c), errors="coerce")
 p, za = num("Último precio"), num("Zona alta")
 fmt = lambda x: "" if pd.isna(x) else f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -133,6 +137,7 @@ tabla = pd.DataFrame({
     "Ticker": d["Ticker"],
     "Nombre": d.get("Nombre"),
     "Bolsa": d["Bolsa_seg"].map(lambda x: ETIQUETA_BOLSA.get(x, x)),
+    "Nota": [notas_riesgo.get(t, (None, None))[0] for t in d["Ticker"]],
     "Último precio": p,
     "Var. día %": num("Variación día %"),
     "Rango 52 sem": [f"{fmt(a)} – {fmt(b)}" for a, b in zip(num("Mínimo 52 sem"), num("Máximo 52 sem"))],
@@ -154,6 +159,7 @@ n2 = lambda t: st.column_config.NumberColumn(t, format="%.2f")
 ev = st.dataframe(
     tabla, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="tabla",
     column_config={"★": st.column_config.TextColumn("★", width="small"),
+                   "Nota": st.column_config.NumberColumn("Nota", format="%d", help="Última nota de riesgo (0-100) generada en la pestaña Riesgo. Más es mejor."),
                    **{c: n2(c) for c in ["Último precio", "Var. día %", "Dist. zona %", "Stop", "Obj. 1", "Obj. 2",
                                          "Riesgo %", "Ratio B/R"]}})
 st.caption("Pulsa una fila para ver su informe, actualizarla, marcarla como favorita o quitarla. "

@@ -1,5 +1,9 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import streamlit as st
 
+import hoja
 from comun import selector_ticker
 from niveles import ErrorInforme, ticker_yahoo
 from riesgo_calculo import calcular
@@ -7,12 +11,24 @@ from riesgo_datos import ErrorRiesgo, descargar
 from riesgo_html import generar_html
 
 st.markdown("## JJTrading_ · Riesgo")
-st.caption("Nota de riesgo de 0 a 100 con datos de Yahoo Finance. Todos los ratios se calculan en la app. No incluye entradas, stops ni recomendaciones.")
+st.caption("Nota de 0 a 100 con datos de Yahoo Finance. Todos los ratios se calculan en la app. No incluye entradas, stops ni recomendaciones.")
 
 
 @st.cache_data(ttl=900, show_spinner=False)
 def riesgo_cacheado(simbolo):
     return calcular(descargar(simbolo))
+
+
+def guardar_y_leer(D):
+    """Guarda la nota de hoy en la hoja de Google y devuelve su historial. Sin hoja configurada, no hace nada."""
+    if not hoja.configurada() or D.get("nota") is None:
+        return []
+    ahora = datetime.now(ZoneInfo("Europe/Madrid"))
+    hoja.guardar_riesgo({"Fecha": f"{ahora:%Y-%m-%d}", "Ticker": D["ticker"], "Nombre": D["nombre"], "Nota": D["nota"],
+                         "Riesgo": D["riesgo"], "Valoración": D["notas"]["val"], "Salud": D["notas"]["sal"],
+                         "Crecimiento": D["notas"]["cre"], "Precio": D["precio"], "Moneda": D["moneda"],
+                         "Hora": f"{ahora:%Y-%m-%d %H:%M}"})
+    return hoja.historial_riesgo(D["ticker"])
 
 
 ticker, bolsa = selector_ticker("rsg")
@@ -24,7 +40,13 @@ if st.button("Generar informe de riesgo", type="primary"):
         try:
             simbolo = ticker_yahoo(ticker, bolsa)
             with st.spinner("Descargando cuentas y cotizaciones, y calculando…"):
-                st.session_state["riesgo"] = riesgo_cacheado(simbolo)
+                D = dict(riesgo_cacheado(simbolo))
+            try:
+                D["historial"] = guardar_y_leer(D)
+            except Exception as e:
+                D["historial"] = []
+                st.caption(f"No se pudo guardar la nota en la hoja de Google: {e}")
+            st.session_state["riesgo"] = D
         except (ErrorInforme, ErrorRiesgo) as e:
             st.error(str(e))
         except Exception as e:

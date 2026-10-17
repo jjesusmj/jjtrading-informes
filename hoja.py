@@ -197,3 +197,52 @@ def guardar_resultados(filas):
     cab = list(filas[0].keys())
     ws.clear()
     ws.update([cab] + [_fila_a_lista(cab, f) for f in filas], "A1", value_input_option="RAW")
+
+
+# ---------------- Riesgo (una nota por acción y día; sirve para ver cómo evoluciona) ----------------
+RIESGO = "Riesgo"
+
+
+def _pestaña_riesgo():
+    libro = _libro()
+    try:
+        return libro.worksheet(RIESGO)
+    except gspread.WorksheetNotFound:
+        return libro.add_worksheet(RIESGO, rows=1000, cols=12)
+
+
+def guardar_riesgo(fila):
+    """Guarda la nota de riesgo de hoy. Si ya hay una de hoy para ese ticker, la sustituye."""
+    _escribir(_pestaña_riesgo(), [fila], clave=lambda f: (f["Fecha"], f["Ticker"]), cols_clave=["Fecha", "Ticker"])
+    leer_riesgo.clear()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def leer_riesgo():
+    try:
+        ws = _libro().worksheet(RIESGO)
+    except gspread.WorksheetNotFound:
+        return pd.DataFrame(columns=["Fecha", "Ticker", "Nota"])
+    filas = ws.get_all_records(value_render_option="UNFORMATTED_VALUE")
+    return pd.DataFrame(filas) if filas else pd.DataFrame(columns=["Fecha", "Ticker", "Nota"])
+
+
+def historial_riesgo(ticker):
+    df = leer_riesgo()
+    if df.empty:
+        return []
+    df = df[df["Ticker"] == ticker].copy()
+    df["Nota"] = pd.to_numeric(df["Nota"], errors="coerce")
+    df = df.dropna(subset=["Nota"]).sort_values("Fecha")
+    return [[str(f)[:10], int(n)] for f, n in zip(df["Fecha"], df["Nota"])]
+
+
+def ultima_nota_riesgo():
+    """Última nota guardada de cada ticker: {ticker: (nota, fecha)}."""
+    df = leer_riesgo()
+    if df.empty:
+        return {}
+    df = df.copy()
+    df["Nota"] = pd.to_numeric(df["Nota"], errors="coerce")
+    df = df.dropna(subset=["Nota"]).sort_values("Fecha")
+    return {t: (int(g["Nota"].iloc[-1]), str(g["Fecha"].iloc[-1])[:10]) for t, g in df.groupby("Ticker")}

@@ -235,6 +235,7 @@ def tecnicos(diario):
     sd = float(np.std(r, ddof=1)) if len(r) > 2 else None
     T["vol"] = sd * math.sqrt(252) * 100 if sd else None
     T["osc"] = sd * P if sd else None
+    T["s200_sube"] = None if len(s200) < 22 or np.isnan(s200[-22]) or np.isnan(s200[-1]) else bool(s200[-1] > s200[-22])
     T["serie_s50"] = [None if np.isnan(x) else round(float(x), 4) for x in s50]
     T["serie_s200"] = [None if np.isnan(x) else round(float(x), 4) for x in s200]
     return T
@@ -415,7 +416,17 @@ def calcular(R):
     tarjeta("per_fwd", P / bpa_e if bpa_e else None, f"{FUENTE}: precio / BPA estimado 12 meses ({es(bpa_e, 2)} {mon})", corte, esc,
             formula=f"{es(P, 2)} / {es(bpa_e, 2)}" if bpa_e else None)
     ev = mcap + deuda_neta if mcap is not None and deuda_neta is not None else None
-    if ebitda is not None and ebitda <= 0 and ev is not None:
+    amort = ebitda - ebit if ebitda is not None and ebit is not None else None
+    D["comp"]["amortizacion"] = amort
+    ebitda_mal = None
+    if amort is not None and capex is not None and ventas and amort > 3 * abs(capex) and amort > 0.10 * ventas:
+        ebitda_mal = (f"Valor descartado: el EBITDA de Yahoo ({millones(ebitda, mon)}) suma amortizaciones de {millones(amort, mon)}, "
+                      f"más de 3 veces lo que invierte ({millones(abs(capex), mon)}). Suele pasar cuando incluye la amortización "
+                      f"de contenidos o intangibles, que son un gasto real del negocio.")
+        D["avisos"].append("El EBITDA de Yahoo no cuadra con las inversiones de la empresa: EV/EBITDA y deuda neta/EBITDA se descartan.")
+    if ebitda_mal:
+        tarjeta("ev_ebitda", None, FUENTE, fd, gris=ebitda_mal)
+    elif ebitda is not None and ebitda <= 0 and ev is not None:
         tarjeta("ev_ebitda", None, FUENTE, fd, gris="EBITDA negativo: el ratio no tiene sentido")
     else:
         tarjeta("ev_ebitda", ev / ebitda if ev is not None and ebitda else None, f"Cálculo: (capitalización + deuda neta) / EBITDA {base_e}", fd)
@@ -429,9 +440,11 @@ def calcular(R):
 
     caja_neta = deuda_neta is not None and deuda_neta < 0
     if caja_neta:
-        K["dn_ebitda"] = {"id": "dn_ebitda", "valor": deuda_neta / ebitda if ebitda else None, "color": "verde", "gris": None,
+        K["dn_ebitda"] = {"id": "dn_ebitda", "valor": deuda_neta / ebitda if ebitda and not ebitda_mal else None, "color": "verde", "gris": None,
                           "avisos": ["Caja neta"], "fuente": "Cálculo: deuda total − caja y equivalentes", "fecha": dv, "caja_neta": True,
                           "formula": f"{millones(deuda, mon)} − {millones(caja, mon)}"}
+    elif ebitda_mal:
+        tarjeta("dn_ebitda", None, FUENTE, dv, gris=ebitda_mal)
     elif ebitda is not None and ebitda <= 0 and deuda_neta is not None:
         K["dn_ebitda"] = {"id": "dn_ebitda", "valor": None, "color": "rojo", "gris": None, "avisos": ["EBITDA negativo con deuda neta: rojo por regla"],
                           "fuente": "Cálculo: deuda neta / EBITDA", "fecha": dv, "formula": None}
@@ -584,7 +597,54 @@ def calcular(R):
     D["ultima"] = {"fecha": bt_all[-1][0], "est": bt_all[-1][1], "real": bt_all[-1][2]} if bt_all else None
     D["proximos"] = R.get("proximos_resultados")
     D["glosario"] = glosario(D)
+    corte_f = _fecha(corte)
+    dpa = sum(a for d, a in (R.get("dividendos") or []) if (corte_f - _fecha(d)).days <= 365)
+    D["dividendo"] = {"dpa": dpa, "rent": dpa / P * 100 if P else None}
+    D["descripcion"] = R.get("descripcion_es") or R.get("descripcion")
+    D["descripcion_traducida"] = bool(R.get("descripcion_es"))
+    from traducciones import INDUSTRIAS, SECTORES
+    D["sector_es"] = R.get("sector_es") or SECTORES.get(R.get("sector"), R.get("sector"))
+    D["industria_es"] = R.get("industria_es") or INDUSTRIAS.get(R.get("industria"), R.get("industria"))
+    D["areas"] = areas(D)
     return D
+
+
+ET_MASC = {"Buena": "Bueno"}
+
+
+def areas(D):
+    """Lo esencial por áreas: los 3 bloques de la nota y 4 datos que no puntúan."""
+    A = []
+    for b, nb, _ in BLOQUES:
+        n, et = D["notas"][b], D["etiquetas"][b]
+        if et is None:
+            continue
+        A.append({"id": f"bloque_{b}", "estado": "ok" if et in ("Excelente", "Buena") else ("ko" if et == "Débil" else "neutro"),
+                  "texto": f"{nb} {(ET_MASC.get(et, et) if b == 'cre' else et).lower()}", "valor": str(n), "puntua": True})
+    T = D["tecnicos"]
+    s = [T["sma200"] is not None and D["precio"] > T["sma200"],
+         T["sma50"] is not None and T["sma200"] is not None and T["sma50"] > T["sma200"], bool(T.get("s200_sube"))]
+    if T["sma200"] is not None:
+        n = sum(s)
+        r1 = ((D.get("evolucion") or {}).get("rent") or {}).get(1, {}).get("precio")
+        A.append({"id": "tendencia", "estado": "ok" if n == 3 else ("ko" if n == 0 else "neutro"),
+                  "texto": "Buena tendencia en bolsa" if n == 3 else ("Mala tendencia en bolsa" if n == 0 else "Tendencia mixta en bolsa"),
+                  "valor": f"{n} de 3", "r1": es(r1, pct=True, signo=True) if r1 is not None else None, "puntua": False, "senales": s})
+    rd = D["dividendo"]["rent"]
+    if rd is not None:
+        A.append({"id": "dividendo", "estado": "ok" if rd >= 3 else ("ko" if rd < 1 else "neutro"),
+                  "texto": "Buen dividendo" if rd >= 3 else ("Dividendo escaso o nulo" if rd < 1 else "Dividendo moderado"),
+                  "valor": es(rd, pct=True), "puntua": False})
+    p = D["piotroski"]
+    if p and p["evaluables"] == 9:
+        A.append({"id": "piotroski", "estado": "ok" if p["puntos"] >= 7 else ("ko" if p["puntos"] <= 3 else "neutro"),
+                  "texto": "Cuentas de calidad" if p["puntos"] >= 7 else ("Cuentas débiles" if p["puntos"] <= 3 else "Cuentas de calidad media"),
+                  "valor": f"Piotroski {p['puntos']}/9", "puntua": False})
+    h = D["historia"]
+    if h and h.get("ok"):
+        A.append({"id": "historia", "estado": "ok" if h["dif"] < -10 else ("ko" if h["dif"] > 10 else "neutro"),
+                  "texto": h["veredicto"][0].upper() + h["veredicto"][1:], "valor": f"PER {es(h['dif'], 0, pct=True, signo=True)}", "puntua": False})
+    return A
 
 
 def etiqueta(n):
@@ -665,7 +725,9 @@ def _dcf(f0, g, r):
 
 
 def valor_justo(R, C, P, fcf, acciones, ni, cons):
-    g0 = _f(cons.get("crec_1y"))
+    g0 = _f(cons.get("crec_0y"))
+    if g0 is None:
+        g0 = _f(cons.get("crec_1y"))
     g = None if g0 is None else min(max(g0, 0.0), TOPE_G)
     eps_t = C.T.get("DilutedEPS_aj") or C.A.get("DilutedEPS_aj") or []
     eps = eps_t[-1][1] if eps_t else None
@@ -778,7 +840,7 @@ def senales(C, mon):
         S.append(("favor" if neg == 0 else "contra",
                   f"Flujo de caja libre positivo los {len(F)} últimos años" if neg == 0 else f"Flujo de caja libre negativo en {neg} de los {len(F)} últimos años",
                   "El flujo de caja libre es el dinero que queda tras invertir en el negocio; con él se pagan dividendos, recompras o deuda."))
-    SH = [(d, v) for d, v, _ in (C.A.get("OrdinarySharesNumber_aj") or []) if v]
+    SH = [(d, v) for d, v, _ in (C.A.get("DilutedAverageShares_aj") or C.A.get("OrdinarySharesNumber_aj") or []) if v]
     if len(SH) >= 2:
         c = (SH[-1][1] / SH[0][1] - 1) * 100
         rng = f"({SH[0][0][:4]}-{SH[-1][0][:4]})"
@@ -816,11 +878,53 @@ def senales(C, mon):
     if V and V[-1][0] in RD:
         S.append(("contexto", f"Dedica un {es(RD[V[-1][0]] / V[-1][1] * 100)} % de sus ventas a I+D ({V[-1][0][:4]})",
                   "La inversión en I+D reduce el beneficio de hoy, pero puede sostener las ventas futuras."))
+    OI = {d: v for d, v in C.anual("OperatingIncome") if v is not None}
+    Vd = dict(V)
+    MO = [(d, OI[d] / Vd[d] * 100) for d in sorted(OI) if Vd.get(d)]
+    if len(MO) >= 2:
+        a0, a1 = MO[0][1], MO[-1][1]
+        rng = f"({MO[0][0][:4]}-{MO[-1][0][:4]})"
+        if a1 - a0 > 1:
+            S.append(("favor", f"Su margen operativo sube del {es(a0)} % al {es(a1)} % {rng}",
+                      "Si el margen sube, la empresa gana más por cada venta: sus costes crecen menos que sus ingresos."))
+        elif a1 - a0 < -1:
+            S.append(("contra", f"Su margen operativo baja del {es(a0)} % al {es(a1)} % {rng}",
+                      "Si el margen baja, los costes crecen más que las ventas y cada venta deja menos beneficio."))
+        else:
+            S.append(("contexto", f"Margen operativo estable: {es(a1)} % en {MO[-1][0][:4]}", "El margen apenas ha cambiado en estos años."))
+    EB, EI = dict(C.anual("EBITDA")), dict(C.anual("EBIT"))
+    ult = max(EB) if EB else None
+    if ult and EB.get(ult) is not None and EI.get(ult) is not None and CX.get(ult) is not None:
+        am = EB[ult] - EI[ult]
+        if am > 0:
+            r = abs(CX[ult]) / am
+            S.append(("contexto", f"Invierte {'más' if r >= 1 else 'menos'} de lo que amortiza ({es(r)} veces en {ult[:4]})",
+                      "Comparar la inversión con la amortización indica si la empresa renueva o amplía sus activos (más de 1 vez) "
+                      "o si gasta menos de lo que se desgasta (menos de 1). Un valor muy bajo puede indicar que la amortización "
+                      "incluye otros gastos, como contenidos o intangibles."))
+    DVd = {d: v for d, v in C.anual("CashDividendsPaid") if v is not None and v < 0}
+    if ult and ult in DVd and ult in OCF and ult in CX:
+        f = OCF[ult] + CX[ult]
+        if f > 0:
+            p = abs(DVd[ult]) / f * 100
+            if p <= 60:
+                S.append(("favor", f"El dividendo se paga con holgura: es el {es(p, 0)} % de su flujo de caja libre ({ult[:4]})",
+                          "Si el dividendo se paga con menos de la mitad de la caja libre, hay margen para mantenerlo aunque el negocio flojee."))
+            elif p > 100:
+                S.append(("contra", f"El dividendo supera su flujo de caja libre ({es(p, 0)} % en {ult[:4]})",
+                          "Pagar más dividendo del que genera en caja obliga a tirar de deuda o de reservas; no se puede mantener mucho tiempo."))
+            else:
+                S.append(("contexto", f"El dividendo se lleva el {es(p, 0)} % de su flujo de caja libre ({ult[:4]})",
+                          "El dividendo está cubierto, pero con poco margen si la caja cae."))
+        else:
+            S.append(("contra", f"Paga dividendo con flujo de caja libre negativo ({ult[:4]})",
+                      "Si la caja libre es negativa, el dividendo se paga con deuda o reservas."))
     DV = [v for _, v in C.anual("CashDividendsPaid") if v is not None]
     if len(DV) >= 2 and all(v < 0 for v in DV):
         S.append(("contexto", f"Ha pagado dividendo los {len(DV)} últimos ejercicios",
                   "Un dividendo constante indica que la empresa genera caja de forma regular."))
-    return [{"tipo": t, "texto": x, "por_que": p} for t, x, p in S]
+    orden = {"favor": 0, "contra": 1, "contexto": 2}
+    return [{"tipo": t, "texto": x, "por_que": p} for t, x, p in sorted(S, key=lambda s: orden[s[0]])]
 
 
 # ---------------------------------------------------------------- tendencia de 5 periodos

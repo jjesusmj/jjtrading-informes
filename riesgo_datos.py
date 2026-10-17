@@ -4,6 +4,8 @@ import datetime as dt
 
 import yfinance as yf
 
+from traducciones import INDUSTRIAS, SECTORES, primeras_frases, traducir
+
 CLAVES = ["TotalRevenue", "GrossProfit", "OperatingIncome", "EBIT", "EBITDA", "NetIncome", "DilutedEPS",
           "TaxRateForCalcs", "InterestExpense", "ResearchAndDevelopment", "DilutedAverageShares",
           "StockholdersEquity", "TotalAssets", "CurrentAssets", "CurrentLiabilities", "RetainedEarnings",
@@ -91,6 +93,10 @@ def descargar(simbolo):
     R["moneda"] = pr.get("currency") or c1["meta"].get("currency")
     R["bolsa"] = pr.get("exchangeName") or c1["meta"].get("exchangeName")
     R["sector"], R["industria"] = ap.get("sector"), ap.get("industry")
+    R["sector_es"], R["industria_es"] = traducir(R["sector"], SECTORES), traducir(R["industria"], INDUSTRIAS)
+    R["descripcion"] = primeras_frases(ap.get("longBusinessSummary"), 2)
+    es = traducir(R["descripcion"]) if R["descripcion"] else ""
+    R["descripcion_es"] = es if es and es != R["descripcion"] else None
     R["acciones"] = _v(ks.get("sharesOutstanding"))
     tr = {e.get("period"): _v(e.get("growth")) for e in (q.get("earningsTrend") or {}).get("trend") or []}
     R["consenso"] = {"objetivo": _v(fd.get("targetMeanPrice")), "analistas": _v(fd.get("numberOfAnalystOpinions")),
