@@ -228,7 +228,8 @@ def svg_evol(m, meses, pid):
 # ---------------------------------------------------------------- secciones
 def sec_resumen(D):
     mon, T = D["moneda"], D["tecnicos"]
-    r12 = (D["evolucion"] or {}).get("rent", {}).get(1, {}).get("precio")
+    r1 = (D["evolucion"] or {}).get("rent", {}).get(1, {})
+    r12 = r1.get("precio")
     pos52 = (D["precio"] - T["min52"]) / (T["max52"] - T["min52"]) * 100 if T["max52"] > T["min52"] else 50
     chips = "".join(f'<span class="chip">{E(x)}</span>' for x in (D["bolsa"], D["sector"], D["industria"], mon) if x)
     prox = f'<span class="chip" style="background:#fff;color:#0f172a;border:1px solid #e3ddd2">Resultados: {_fmt_fecha(D["proximos"])}</span>' if D["proximos"] else ""
@@ -236,7 +237,7 @@ def sec_resumen(D):
          f'<div class="hero"><div class="t">{E(D["nombre"] or D["ticker"])} <span class="chip m" style="font-size:13px">{E(D["ticker"])}</span></div><div>{chips}</div></div>',
          f'<div class="precio"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:flex-start">'
          f'<div><span class="big m">{es(D["precio"], 2)}</span> <span class="m" style="color:var(--mut)">{E(mon)}</span><br>'
-         + (f'{_pill("verde" if r12 >= 0 else "rojo", es(r12, pct=True, signo=True))} <span style="color:var(--mut);font-size:13px">en un año</span>' if r12 is not None else "")
+         + (f'{_pill("verde" if r12 >= 0 else "rojo", es(r12, pct=True, signo=True))} <span style="color:var(--mut);font-size:13px">en un año (desde el cierre del {_fmt_fecha(r1.get("desde"))})</span>' if r12 is not None else "")
          + f'<div style="color:var(--mut);font-size:13px">Cierre del {_fmt_fecha(D["corte"])} · Capitalización {millones(D["mcap"], mon)}</div></div>{prox}</div>'
          f'<div class="m" style="display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:12px"><span>Mín. 52 sem. {es(T["min52"], 2)}</span><span>Máx. {es(T["max52"], 2)}</span></div>'
          f'<div class="bar52"><i style="left:calc({pos52:.1f}% - 1px)"></i></div></div>']
@@ -308,7 +309,7 @@ def sec_evolucion(D):
     o = ['<section class="sec" id="evolucion"><h2>Evolución y rentabilidad</h2>']
     if not ev:
         return o[0] + '<p class="sub">Sin dato: Yahoo no tiene 13 meses de cotización.</p></section>'
-    disp = [(a, m) for a, m in ((1, 12), (3, 36), (5, 60)) if len(ev["serie"]) > m]
+    disp = [(a, m) for a, m in ((1, 12), (3, 36), (5, 60)) if len(ev["serie"]) > m and a in ev["rent"]]
     o.append(f'<p class="sub">Cuánto habrías ganado {"con los dividendos reinvertidos" if ev["con_dividendos"] else "(no paga dividendo)"}, en {E(D["moneda"])}</p>'
              '<div class="per" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
              + "".join(f'<button type="button" data-p="ev{a}" class="{"on" if a == disp[-1][0] else ""}">{a} año{"s" if a > 1 else ""}</button>' for a, _ in disp)

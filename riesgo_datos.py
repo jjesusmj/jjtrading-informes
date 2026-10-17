@@ -39,14 +39,21 @@ def descargar(simbolo):
     get = tk._data.get_raw_json
     p2 = int(dt.datetime.now(dt.timezone.utc).timestamp())
     p1 = p2 - 6 * 365 * 86400
+    p1d = p2 - (5 * 365 + 20) * 86400
     R = {"ticker": simbolo, "avisos_descarga": []}
 
-    c1 = get(f"{Q2}/v8/finance/chart/{simbolo}", params={"range": "1y", "interval": "1d"})["chart"]["result"]
+    c1 = get(f"{Q2}/v8/finance/chart/{simbolo}", params={"period1": p1d, "period2": p2, "interval": "1d"})["chart"]["result"]
     if not c1:
         raise ErrorRiesgo(f"{simbolo}: Yahoo no devuelve cotizaciones (¿ticker o bolsa incorrectos?)")
     c1 = c1[0]
-    cl = c1["indicators"]["quote"][0]["close"]
-    R["diario"] = [[_d(t), round(c, 4)] for t, c in zip(c1["timestamp"], cl) if c is not None]
+    cl, aj = c1["indicators"]["quote"][0]["close"], c1["indicators"]["adjclose"][0]["adjclose"]
+    R["diario5"] = [[_d(t), round(c, 4), round(a, 4)] for t, c, a in zip(c1["timestamp"], cl, aj) if c is not None and a is not None]
+    if R["diario5"]:
+        f = dt.date.fromisoformat(R["diario5"][-1][0])
+        desde = f.replace(year=f.year - 1, day=28 if (f.month, f.day) == (2, 29) else f.day).isoformat()
+        R["diario"] = [[d, c] for d, c, _ in R["diario5"] if d > desde]
+    else:
+        R["diario"] = []
     if len(R["diario"]) < 30:
         raise ErrorRiesgo(f"{simbolo}: Yahoo no devuelve cotizaciones suficientes")
 

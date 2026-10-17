@@ -621,19 +621,36 @@ def historia_per(R, C, P):
 
 
 # ---------------------------------------------------------------- evolución y rentabilidad
+def _hace(fecha, anos):
+    f = _fecha(fecha)
+    return f.replace(year=f.year - anos, day=28 if (f.month, f.day) == (2, 29) else f.day).isoformat()
+
+
 def evolucion(R):
     m = R.get("mensual") or []
+    d5 = R.get("diario5") or []
     if len(m) < 13:
         return None
-    out = {"serie": m, "rent": {}}
+    out = {"serie": m, "rent": {}, "base": "diaria" if d5 else "mensual"}
     for anos in (1, 3, 5):
-        n = 12 * anos
-        if len(m) > n:
-            a, b = m[-1 - n], m[-1]
-            p = b[1] / a[1] - 1
-            t = b[2] / a[2] - 1
-            out["rent"][anos] = {"precio": p * 100, "total": t * 100,
-                                 "anual_precio": ((1 + p) ** (1 / anos) - 1) * 100, "anual_total": ((1 + t) ** (1 / anos) - 1) * 100}
+        previos = []
+        if d5:
+            fin = d5[-1]
+            obj = _hace(fin[0], anos)
+            previos = [x for x in d5 if x[0] <= obj]
+        if previos and (_fecha(obj) - _fecha(previos[-1][0])).days <= 7:
+            ini = previos[-1]
+        else:
+            n = 12 * anos
+            if len(m) <= n:
+                continue
+            ini, fin = m[-1 - n], m[-1]
+        p = fin[1] / ini[1] - 1
+        t = fin[2] / ini[2] - 1
+        out["rent"][anos] = {"precio": p * 100, "total": t * 100, "desde": ini[0],
+                             "anual_precio": ((1 + p) ** (1 / anos) - 1) * 100, "anual_total": ((1 + t) ** (1 / anos) - 1) * 100}
+    if 1 not in out["rent"]:
+        return None
     out["con_dividendos"] = bool(R.get("dividendos"))
     return out
 
