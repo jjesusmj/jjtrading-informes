@@ -1,6 +1,10 @@
 # Página Crédito: precio de la acción frente a los spreads de crédito de EE. UU. publicados en FRED.
 # Descarga y cálculo. La página solo presenta lo que sale de aquí.
 import io
+import json
+import socket
+import time
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -16,28 +20,69 @@ VENTANAS = {20: "Corto plazo", 60: "Medio plazo"}
 SESIONES_CORR = 60
 MIN_MUESTRA = 40             # mínimo de cambios en 12 meses para calcular el umbral del aviso
 URL_FRED = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={codigo}&cosd={desde}"
+URL_API = ("https://api.stlouisfed.org/fred/series/observations?series_id={codigo}&observation_start={desde}"
+           "&api_key={clave}&file_type=json")
 
 
 class ErrorCredito(Exception):
     pass
 
 
-def descargar_fred(codigo, desde):
-    """Serie diaria de FRED en puntos básicos (FRED la publica en %). Índice: fechas sin hora."""
-    req = urllib.request.Request(URL_FRED.format(codigo=codigo, desde=desde),
-                                 headers={"User-Agent": "Mozilla/5.0 (JJTrading_)"})
-    with urllib.request.urlopen(req, timeout=25) as r:
-        texto = r.read().decode("utf-8", "replace")
+def _leer(url, timeout=25):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (JJTrading_)", "Accept": "text/csv,application/json,*/*"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def _motivo(e):
+    if isinstance(e, urllib.error.HTTPError):
+        return f"FRED ha respondido con error {e.code}"
+    if isinstance(e, (TimeoutError, socket.timeout)) or "timed out" in str(e).lower():
+        return "FRED no ha respondido a tiempo"
+    if isinstance(e, urllib.error.URLError):
+        return f"no se ha podido conectar con FRED ({e.reason})"
+    return str(e) or type(e).__name__
+
+
+def _serie_csv(codigo, desde):
+    texto = _leer(URL_FRED.format(codigo=codigo, desde=desde))
+    if texto.lstrip().startswith("<"):
+        raise ErrorCredito("FRED ha devuelto una página web en lugar de datos (posible mantenimiento)")
     df = pd.read_csv(io.StringIO(texto))
     if df.shape[1] < 2 or df.empty:
         raise ErrorCredito("FRED no ha devuelto datos")
-    fechas = pd.to_datetime(df.iloc[:, 0], errors="coerce")
-    valores = pd.to_numeric(df.iloc[:, 1], errors="coerce") * 100
-    s = pd.Series(valores.values, index=fechas).dropna()
-    s = s[s.index.notna()]
-    if s.empty:
-        raise ErrorCredito("FRED no ha devuelto datos")
-    return s.sort_index()
+    return pd.to_datetime(df.iloc[:, 0], errors="coerce"), pd.to_numeric(df.iloc[:, 1], errors="coerce")
+
+
+def _serie_api(codigo, desde, clave):
+    js = json.loads(_leer(URL_API.format(codigo=codigo, desde=desde, clave=clave)))
+    obs = js.get("observations") or []
+    if not obs:
+        raise ErrorCredito(js.get("error_message") or "la API de FRED no ha devuelto datos")
+    return (pd.to_datetime([o.get("date") for o in obs], errors="coerce"),
+            pd.to_numeric(pd.Series([o.get("value") for o in obs]), errors="coerce"))
+
+
+def descargar_fred(codigo, desde, clave=None):
+    """Serie diaria de FRED en puntos básicos (FRED la publica en %). Prueba la API (si hay clave) y el CSV, dos veces cada uno."""
+    vias = ([("API", lambda: _serie_api(codigo, desde, clave))] if clave else []) + [("CSV", lambda: _serie_csv(codigo, desde))]
+    motivos = []
+    for nombre, via in vias:
+        for intento in range(2):
+            try:
+                fechas, valores = via()
+                s = pd.Series(np.asarray(valores, float) * 100, index=pd.DatetimeIndex(fechas)).dropna()
+                s = s[s.index.notna()]
+                if s.empty:
+                    raise ErrorCredito("FRED no ha devuelto datos")
+                return s.sort_index()
+            except Exception as e:
+                m = _motivo(e)
+                if intento == 1 or isinstance(e, ErrorCredito):
+                    motivos.append(f"{nombre}: {m}" if clave else m)
+                    break
+                time.sleep(2)
+    raise ErrorCredito("; ".join(motivos))
 
 
 def descargar_precio(simbolo):

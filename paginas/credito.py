@@ -20,9 +20,16 @@ ESTADO = {"negativa": ("🔴", "Divergencia negativa", "La acción sube y el cr�
           None: ("⚪", "Sin dato", "No hay sesiones suficientes para calcularlo.")}
 
 
+def _clave_fred():
+    try:
+        return st.secrets.get("FRED_API_KEY", "") or None
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
-def fred_cacheado(codigo, desde):
-    return descargar_fred(codigo, desde)
+def fred_cacheado(codigo, desde, clave):
+    return descargar_fred(codigo, desde, clave)
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -43,9 +50,9 @@ def obtener(simbolo):
     spreads = {}
     for k, info in INDICES.items():
         try:
-            spreads[k] = fred_cacheado(info["codigo"], desde)
-        except Exception:
-            spreads[k] = "no se ha podido descargar la serie de FRED"
+            spreads[k] = fred_cacheado(info["codigo"], desde, _clave_fred())
+        except Exception as e:
+            spreads[k] = f"no se ha podido descargar la serie de FRED ({e})"
     return calcular(precio, spreads)
 
 
