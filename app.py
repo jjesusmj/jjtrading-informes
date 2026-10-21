@@ -19,4 +19,5 @@ st.navigation([
     st.Page("paginas/seguimiento.py", title="Seguimiento", icon="⭐"),
     st.Page("paginas/resultados.py", title="Resultados", icon="🎯"),
     st.Page("paginas/riesgo.py", title="Análisis acción", icon="🔍"),
+    st.Page("paginas/credito.py", title="Crédito", icon="🏦"),
 ]).run()

@@ -1,0 +1,120 @@
+# Página Crédito: precio de la acción frente a los spreads de crédito de EE. UU. publicados en FRED.
+# Descarga y cálculo. La página solo presenta lo que sale de aquí.
+import io
+import urllib.request
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
+
+INDICES = {
+    "BBB": {"codigo": "BAMLC0A4CBBB", "nombre": "BBB EE. UU."},
+    "HY": {"codigo": "BAMLH0A0HYM2", "nombre": "High Yield EE. UU."},
+}
+INDICE_AVISO = "HY"          # el aviso de divergencia usa el índice que antes reacciona
+VENTANAS = {20: "Corto plazo", 60: "Medio plazo"}
+SESIONES_CORR = 60
+MIN_MUESTRA = 40             # mínimo de cambios en 12 meses para calcular el umbral del aviso
+URL_FRED = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={codigo}&cosd={desde}"
+
+
+class ErrorCredito(Exception):
+    pass
+
+
+def descargar_fred(codigo, desde):
+    """Serie diaria de FRED en puntos básicos (FRED la publica en %). Índice: fechas sin hora."""
+    req = urllib.request.Request(URL_FRED.format(codigo=codigo, desde=desde),
+                                 headers={"User-Agent": "Mozilla/5.0 (JJTrading_)"})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        texto = r.read().decode("utf-8", "replace")
+    df = pd.read_csv(io.StringIO(texto))
+    if df.shape[1] < 2 or df.empty:
+        raise ErrorCredito("FRED no ha devuelto datos")
+    fechas = pd.to_datetime(df.iloc[:, 0], errors="coerce")
+    valores = pd.to_numeric(df.iloc[:, 1], errors="coerce") * 100
+    s = pd.Series(valores.values, index=fechas).dropna()
+    s = s[s.index.notna()]
+    if s.empty:
+        raise ErrorCredito("FRED no ha devuelto datos")
+    return s.sort_index()
+
+
+def descargar_precio(simbolo):
+    """Cierres diarios de 2 años (hacen falta para medir lo normal de los últimos 12 meses)."""
+    h = yf.Ticker(simbolo).history(period="2y", interval="1d", auto_adjust=True)
+    if h is None or h.empty or "Close" not in h:
+        raise ErrorCredito(f"Yahoo no devuelve cotizaciones para {simbolo}")
+    c = h["Close"].dropna()
+    c.index = pd.DatetimeIndex(c.index).tz_localize(None).normalize()
+    return c[~c.index.duplicated(keep="last")]
+
+
+def _num(x, dec=None):
+    if x is None or (isinstance(x, float) and not np.isfinite(x)):
+        return None
+    return round(float(x), dec) if dec is not None else float(x)
+
+
+def correlacion(precio, spread, n=SESIONES_CORR):
+    """Pearson entre variación diaria del precio (%) y variación diaria del spread (pb), últimos n pares válidos."""
+    dp = precio.pct_change(fill_method=None) * 100
+    ds = spread.diff()
+    pares = pd.DataFrame({"p": dp, "s": ds}).dropna()
+    if len(pares) < n:
+        return None
+    u = pares.tail(n)
+    if u["p"].std() == 0 or u["s"].std() == 0:
+        return None
+    return _num(u["p"].corr(u["s"]), 2)
+
+
+def divergencia(precio, spread, w, inicio):
+    """Compara el movimiento de las últimas w sesiones con lo habitual (una desviación típica) en los últimos 12 meses."""
+    cp = (precio / precio.shift(w) - 1) * 100
+    cs = spread - spread.shift(w)
+    df = pd.DataFrame({"p": cp, "s": cs}).dropna()
+    hist = df[df.index >= inicio]
+    if len(hist) < MIN_MUESTRA:
+        return {"ventana": w, "nombre": VENTANAS[w], "estado": None}
+    up, us = hist["p"].std(), hist["s"].std()
+    ult = hist.iloc[-1]
+    if ult["p"] > up and ult["s"] > us:
+        estado = "negativa"
+    elif ult["p"] < -up and ult["s"] < -us:
+        estado = "positiva"
+    else:
+        estado = "ninguna"
+    return {"ventana": w, "nombre": VENTANAS[w], "estado": estado, "fecha": hist.index[-1].strftime("%Y-%m-%d"),
+            "precio_pct": _num(ult["p"], 1), "spread_pb": _num(ult["s"], 0),
+            "umbral_pct": _num(up, 1), "umbral_pb": _num(us, 0)}
+
+
+def calcular(precio, spreads):
+    """precio: cierres diarios. spreads: {clave: serie en pb o un texto de error}. Ventana de 12 meses."""
+    if precio is None or len(precio) < 2:
+        raise ErrorCredito("No hay cotizaciones suficientes")
+    corte = precio.index[-1]
+    inicio = corte - pd.DateOffset(years=1)
+    R = {"corte": corte.strftime("%Y-%m-%d"), "precio": precio[precio.index >= inicio],
+         "precio_ultimo": _num(precio.iloc[-1], 2), "series": {}}
+    for k, info in INDICES.items():
+        s = spreads.get(k)
+        d = {"clave": k, **info}
+        if not isinstance(s, pd.Series) or s.empty:
+            d.update(error=s if isinstance(s, str) else "sin datos", alineada=None)
+            R["series"][k] = d
+            continue
+        al = s.reindex(precio.index)                     # fechas de la acción; sin dato = hueco, no se rellena
+        en12 = al[al.index >= inicio].dropna()
+        d.update(error=None, alineada=al[al.index >= inicio], ultimo_publicado=s.index[-1].strftime("%Y-%m-%d"))
+        if en12.empty:
+            d.update(error="la serie no tiene datos en los últimos 12 meses")
+        else:
+            d.update(actual=_num(en12.iloc[-1], 0), fecha_actual=en12.index[-1].strftime("%Y-%m-%d"),
+                     var12=_num(en12.iloc[-1] - en12.iloc[0], 0), fecha_inicio=en12.index[0].strftime("%Y-%m-%d"),
+                     corr=correlacion(precio[precio.index >= inicio], al[al.index >= inicio]))
+            if k == INDICE_AVISO:
+                d["avisos"] = [divergencia(precio, al, w, inicio) for w in VENTANAS]
+        R["series"][k] = d
+    return R
