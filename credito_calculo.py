@@ -12,10 +12,14 @@ import pandas as pd
 import yfinance as yf
 
 INDICES = {
-    "BBB": {"codigo": "BAMLC0A4CBBB", "nombre": "BBB EE. UU."},
-    "HY": {"codigo": "BAMLH0A0HYM2", "nombre": "High Yield EE. UU."},
+    "BBB": {"codigo": "BAMLC0A4CBBB", "nombre": "BBB EE. UU.",
+            "texto": "Índice de bonos de empresas de EE. UU. con nota BBB, la más baja del grado de inversión. "
+                     "Mide el crédito de las empresas grandes y estables."},
+    "HY": {"codigo": "BAMLH0A0HYM2", "nombre": "High Yield EE. UU.",
+           "texto": "Índice de bonos de empresas de EE. UU. con nota BB o inferior («bonos basura»). "
+                    "Suele ser el primero en subir cuando el mercado se tensa."},
 }
-INDICE_AVISO = "HY"          # el aviso de divergencia usa el índice que antes reacciona
+INDICE_AVISO = "HY"          # el aviso de crédito usa el índice que antes reacciona
 VENTANAS = {20: "Corto plazo", 60: "Medio plazo"}
 SESIONES_CORR = 60
 MIN_MUESTRA = 40             # mínimo de cambios en 12 meses para calcular el umbral del aviso
@@ -114,8 +118,8 @@ def correlacion(precio, spread, n=SESIONES_CORR):
     return _num(u["p"].corr(u["s"]), 2)
 
 
-def divergencia(precio, spread, w, inicio):
-    """Compara el movimiento de las últimas w sesiones con lo habitual (una desviación típica) en los últimos 12 meses."""
+def aviso_credito(precio, spread, w, inicio):
+    """Si el spread se ha movido en w sesiones más de lo habitual (una desviación típica en 12 meses) y qué ha hecho la acción."""
     cp = (precio / precio.shift(w) - 1) * 100
     cs = spread - spread.shift(w)
     df = pd.DataFrame({"p": cp, "s": cs}).dropna()
@@ -124,12 +128,12 @@ def divergencia(precio, spread, w, inicio):
         return {"ventana": w, "nombre": VENTANAS[w], "estado": None}
     up, us = hist["p"].std(), hist["s"].std()
     ult = hist.iloc[-1]
-    if ult["p"] > up and ult["s"] > us:
-        estado = "negativa"
-    elif ult["p"] < -up and ult["s"] < -us:
-        estado = "positiva"
+    if ult["s"] > us:
+        estado = "empeora_cae" if ult["p"] < 0 else "empeora_no_cae"
+    elif ult["s"] < -us:
+        estado = "mejora"
     else:
-        estado = "ninguna"
+        estado = "estable"
     return {"ventana": w, "nombre": VENTANAS[w], "estado": estado, "fecha": hist.index[-1].strftime("%Y-%m-%d"),
             "precio_pct": _num(ult["p"], 1), "spread_pb": _num(ult["s"], 0),
             "umbral_pct": _num(up, 1), "umbral_pb": _num(us, 0)}
@@ -160,6 +164,6 @@ def calcular(precio, spreads):
                      var12=_num(en12.iloc[-1] - en12.iloc[0], 0), fecha_inicio=en12.index[0].strftime("%Y-%m-%d"),
                      corr=correlacion(precio[precio.index >= inicio], al[al.index >= inicio]))
             if k == INDICE_AVISO:
-                d["avisos"] = [divergencia(precio, al, w, inicio) for w in VENTANAS]
+                d["avisos"] = [aviso_credito(precio, al, w, inicio) for w in VENTANAS]
         R["series"][k] = d
     return R
